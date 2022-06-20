@@ -1,9 +1,9 @@
 import XCTest
 
-@testable import RNAJSON
+import RNAJSON
 import AsyncAlgorithms
 
-final class RNAJSONTests: XCTestCase {
+final class JSONTokenizerTests: XCTestCase {
     func testSingleDigit() async throws {
         let json = Data("""
         1
@@ -64,6 +64,68 @@ final class RNAJSONTests: XCTestCase {
         for (lhs, rhs) in zip(result, expected) {
             XCTAssertEqual(lhs, rhs)
         }
-
     }
+
+    func testDeepJSON() async throws {
+        let url = Bundle.module.url(forResource: "json.org/pass2.json", withExtension: nil)!
+        let json = try Data(contentsOf: url).async
+        let result = try await Array(json.jsonTokens)
+
+        let expected: [JSONToken] =
+        repeatElement(JSONToken.arrayOpen, count: 19) + ["Not too deep"] + repeatElement(JSONToken.arrayClose, count: 19)
+
+        XCTAssertEqual(result.count, expected.count)
+        for (lhs, rhs) in zip(result, expected) {
+            XCTAssertEqual(lhs, rhs)
+        }
+    }
+
+    func testBareString() async throws {
+        let url = Bundle.module.url(forResource: "json.org/fail1.json", withExtension: nil)!
+        let json = try Data(contentsOf: url).async
+        let result = try await Array(json.jsonTokens)
+
+        let expected: [JSONToken] =
+        ["A JSON payload should be an object or array, not a string."]
+
+        XCTAssertEqual(result.count, expected.count)
+        for (lhs, rhs) in zip(result, expected) {
+            XCTAssertEqual(lhs, rhs)
+        }
+    }
+
+    func testUnclosedArray() async throws {
+        let url = Bundle.module.url(forResource: "json.org/fail2.json", withExtension: nil)!
+
+        let json = try Data(contentsOf: url).async
+        let result = try await Array(json.jsonTokens)
+
+        let expected: [JSONToken] =
+        [.arrayOpen, "Unclosed array"]
+
+        XCTAssertEqual(result.count, expected.count)
+        for (lhs, rhs) in zip(result, expected) {
+            XCTAssertEqual(lhs, rhs)
+        }
+    }
+
+    func testUnquotedKey() async throws {
+        let url = Bundle.module.url(forResource: "json.org/fail3.json", withExtension: nil)!
+
+        let json = try Data(contentsOf: url).async
+
+        var tokens = json.jsonTokens.makeAsyncIterator()
+
+        let first = try await tokens.next()
+
+        XCTAssertEqual(JSONToken.objectOpen, first)
+
+        do {
+            _ = try await tokens.next()
+            XCTFail("Expected to throw while awaiting, but succeeded")
+        } catch let error as JSONError {
+            XCTAssertEqual(error, .unexpectedByte)
+        }
+    }
+   
 }

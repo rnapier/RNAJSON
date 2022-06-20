@@ -1,120 +1,16 @@
 import Foundation
 
-public enum JSONToken: Hashable {
-    case arrayOpen
-    case arrayClose
-    case objectOpen
-    case objectClose
-    case colon
-    case comma
-    case `true`
-    case `false`
-    case null
-    case string(Data)
-    case number(Data)
-}
-
-extension JSONToken {
-    static func digits(_ digits: String) -> Self {
-        .number(Data(digits.utf8))
-    }
-}
-
-extension JSONToken: ExpressibleByStringLiteral {
-    public init(stringLiteral value: StringLiteralType) {
-        self = .string(Data(value.utf8))
-    }
-}
-
-extension JSONToken: ExpressibleByIntegerLiteral {
-    public init(integerLiteral value: IntegerLiteralType) {
-        self = .number(Data("\(value)".utf8))
-    }
-}
-
-extension JSONToken: ExpressibleByFloatLiteral {
-    public init(floatLiteral value: FloatLiteralType) {
-        self = .number(Data("\(value)".utf8))
-    }
-}
-
-extension JSONToken: ExpressibleByNilLiteral {
-    public init(nilLiteral: ()) {
-        self = .null
-    }
-}
-
-extension JSONToken: ExpressibleByBooleanLiteral {
-    public init(booleanLiteral value: BooleanLiteralType) {
-        self = value ? .true : .false
-    }
-}
-
-extension JSONToken: CustomStringConvertible {
-    public var description: String {
-        switch self {
-        case .arrayOpen: return ".arrayOpen"
-        case .arrayClose: return ".arrayClose"
-        case .objectOpen: return ".objectOpen"
-        case .objectClose: return ".objectClose"
-        case .colon: return ".colon"
-        case .comma: return ".comma"
-        case .true: return "true"
-        case .false: return "false"
-        case .null: return ".null"
-        case .string(let data):
-            if let string = String(data: data, encoding: .utf8) {
-                if string.contains("\\") {
-                    return """
-                        #"\(string)"#
-                        """
-                } else {
-                    return """
-                        "\(string)"
-                        """
-                }
-            } else {
-                let bytes = data.map { "\($0)" }.joined(separator: ",")
-                return """
-                    .string(Data([\(bytes)]))
-                    """
-            }
-
-        case .number(let data):
-            if let digits = String(data: data, encoding: .utf8) {
-                let interpreted = "\(digits)"
-
-                if let int = Int(interpreted), "\(int)" == interpreted {
-                    return interpreted
-                }
-
-                if let double = Double(interpreted), "\(double)" == interpreted {
-                    return interpreted
-                }
-
-                return """
-                    .digits("\(digits)")
-                    """
-            } else {
-                let bytes = data.map { "\($0)" }.joined(separator: ",")
-                return """
-                    .number(Data([\(bytes)]))
-                    """
-            }
-        }
-    }
-}
-
-public enum JSONError: Swift.Error {
+public enum JSONError: Swift.Error, Hashable {
     case unexpectedByte// (at: Int, found: [UInt8])
-    case unexpectedToken(at: Int, expected: [JSONToken], found: JSONToken)
+    case unexpectedToken // (at: Int, expected: [JSONToken], found: JSONToken)
     case dataTruncated
     case typeMismatch
     case dataCorrupted
     case missingValue
 }
 
-private let whitespaceBytes: [UInt8] = [0x09, 0x0a, 0x0d, 0x20]
+
+internal let whitespaceBytes: [UInt8] = [0x09, 0x0a, 0x0d, 0x20]
 private let newlineBytes: [UInt8] = [0x0a, 0x0d]
 private let numberBytes: [UInt8] = [0x2b,   // +
                                     0x2d,   // -
@@ -133,7 +29,6 @@ public struct AsyncJSONTokenizer<Base: AsyncSequence>: AsyncSequence where Base.
         public typealias Element = JSONToken
 
         var byteSource: Base.AsyncIterator
-        var buffer: Array<UInt8> = []
         var peek: UInt8? = nil
 
         internal init(underlyingIterator: Base.AsyncIterator) {
@@ -228,13 +123,7 @@ public struct AsyncJSONTokenizer<Base: AsyncSequence>: AsyncSequence where Base.
                     return .number(number)
 
                 case 0x09, 0x0a, 0x0d, 0x20: // consume whitespace
-                    while let byte = try await byteSource.next() {
-                        guard whitespaceBytes.contains(byte) else {
-                            peek = byte
-                            break
-                        }
-                    }
-
+                    continue
 
                 default:
                     throw JSONError.unexpectedByte
