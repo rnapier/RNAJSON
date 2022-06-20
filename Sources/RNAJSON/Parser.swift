@@ -7,8 +7,6 @@
 //  https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/JSONSerialization%2BParser.swift
 //
 
-import Foundation
-
 public enum JSONParserError: Swift.Error, Equatable {
     case cannotConvertInputDataToUTF8
     case unexpectedCharacter(ascii: UInt8, characterIndex: Int)

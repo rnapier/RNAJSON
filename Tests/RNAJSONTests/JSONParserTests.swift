@@ -146,23 +146,17 @@ final class JSONParserTests: XCTestCase {
 //        }
 //    }
 //
-//    func testUnquotedKey() async throws {
-//        let url = Bundle.module.url(forResource: "json.org/fail3.json", withExtension: nil)!
-//
-//        let json = try Data(contentsOf: url).async
-//
-//        var tokens = json.jsonTokens.makeAsyncIterator()
-//
-//        let first = try await tokens.next()
-//
-//        XCTAssertEqual(JSONToken.objectOpen, first)
-//
-//        do {
-//            _ = try await tokens.next()
-//            XCTFail("Expected to throw while awaiting, but succeeded")
-//        } catch let error as JSONError {
-//            XCTAssertEqual(error, .unexpectedByte)
-//        }
-//    }
+    func testUnquotedKey() async throws {
+        let json = Array("""
+        {unquoted_key: "keys must be quoted"}
+        """.utf8)
+
+        var parser = JSONParser(bytes: json)
+
+        await XCTAssertThrowsError(try parser.parse()) {
+            XCTAssertEqual($0 as? JSONParserError, .unexpectedCharacter(ascii: UInt8(ascii: "u"), characterIndex: 1))
+        }
+
+    }
 
 }

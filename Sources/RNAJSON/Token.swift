@@ -5,8 +5,6 @@
 //  Created by Rob Napier on 6/20/22.
 //
 
-import Foundation
-
 public enum JSONToken: Hashable {
     case arrayOpen
     case arrayClose
@@ -17,31 +15,31 @@ public enum JSONToken: Hashable {
     case `true`
     case `false`
     case null
-    case string(Data)
-    case number(Data)
+    case string([UInt8])
+    case number([UInt8])
 }
 
 extension JSONToken {
     public static func digits(_ digits: String) -> Self {
-        .number(Data(digits.utf8))
+        .number(Array(digits.utf8))
     }
 }
 
 extension JSONToken: ExpressibleByStringLiteral {
     public init(stringLiteral value: StringLiteralType) {
-        self = .string(Data(value.utf8))
+        self = .string(Array(value.utf8))
     }
 }
 
 extension JSONToken: ExpressibleByIntegerLiteral {
     public init(integerLiteral value: IntegerLiteralType) {
-        self = .number(Data("\(value)".utf8))
+        self = .number(Array("\(value)".utf8))
     }
 }
 
 extension JSONToken: ExpressibleByFloatLiteral {
     public init(floatLiteral value: FloatLiteralType) {
-        self = .number(Data("\(value)".utf8))
+        self = .number(Array("\(value)".utf8))
     }
 }
 
@@ -70,7 +68,8 @@ extension JSONToken: CustomStringConvertible {
         case .false: return "false"
         case .null: return ".null"
         case .string(let data):
-            if let string = String(data: data, encoding: .utf8) {
+            let string = String(decoding: data, as: Unicode.UTF8.self)
+            if !string.contains("\u{FFFD}") {
                 if string.contains("\\") {
                     return """
                         #"\(string)"#
@@ -88,14 +87,8 @@ extension JSONToken: CustomStringConvertible {
             }
 
         case .number(let data):
-            if let digits = String(data: data, encoding: .utf8) {
-                return digits.digitsDescription
-            } else {
-                let bytes = data.map { "\($0)" }.joined(separator: ", ")
-                return """
-                    .number(Data([\(bytes)]))
-                    """
-            }
+            let digits = String(decoding: data, as: Unicode.UTF8.self)
+            return digits.digitsDescription            
         }
     }
 }

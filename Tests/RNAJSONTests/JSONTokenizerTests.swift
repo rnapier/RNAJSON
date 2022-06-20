@@ -81,8 +81,10 @@ final class JSONTokenizerTests: XCTestCase {
     }
 
     func testBareString() async throws {
-        let url = Bundle.module.url(forResource: "json.org/fail1.json", withExtension: nil)!
-        let json = try Data(contentsOf: url).async
+        let json = Array("""
+        "A JSON payload should be an object or array, not a string."
+        """.utf8).async
+
         let result = try await Array(json.jsonTokens)
 
         let expected: [JSONToken] =
@@ -110,9 +112,9 @@ final class JSONTokenizerTests: XCTestCase {
     }
 
     func testUnquotedKey() async throws {
-        let url = Bundle.module.url(forResource: "json.org/fail3.json", withExtension: nil)!
-
-        let json = try Data(contentsOf: url).async
+        let json = Data("""
+        {unquoted_key: "keys must be quoted"}
+        """.utf8).async
 
         var tokens = json.jsonTokens.makeAsyncIterator()
 
@@ -120,12 +122,25 @@ final class JSONTokenizerTests: XCTestCase {
 
         XCTAssertEqual(JSONToken.objectOpen, first)
 
-        do {
-            _ = try await tokens.next()
-            XCTFail("Expected to throw while awaiting, but succeeded")
-        } catch let error as JSONError {
-            XCTAssertEqual(error, .unexpectedByte)
+        await XCTAssertThrowsError(try await tokens.next()) {
+            XCTAssertEqual($0 as? JSONError, .unexpectedCharacter(ascii: UInt8(ascii: "u"), characterIndex: 1))
         }
     }
-   
+}
+
+extension XCTest {
+    func XCTAssertThrowsError<T: Sendable>(
+        _ expression: @autoclosure () async throws -> T,
+        _ message: @autoclosure () -> String = "",
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ errorHandler: (_ error: Error) -> Void = { _ in }
+    ) async {
+        do {
+            _ = try await expression()
+            XCTFail(message(), file: file, line: line)
+        } catch {
+            errorHandler(error)
+        }
+    }
 }

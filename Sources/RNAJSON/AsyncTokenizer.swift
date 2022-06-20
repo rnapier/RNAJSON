@@ -1,6 +1,6 @@
-import Foundation
-
 public enum JSONError: Swift.Error, Hashable {
+    case unexpectedCharacter(ascii: UInt8, characterIndex: Int)
+
     case unexpectedByte// (at: Int, found: [UInt8])
     case unexpectedToken // (at: Int, expected: [JSONToken], found: JSONToken)
     case dataTruncated
@@ -20,7 +20,7 @@ private let numberBytes: [UInt8] = [0x2b,   // +
                                     0x65    // e
 ]
 
-public struct AsyncJSONTokenizer<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
+public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
     public typealias Element = JSONToken
 
     var base: Base
@@ -36,9 +36,12 @@ public struct AsyncJSONTokenizer<Base: AsyncSequence>: AsyncSequence where Base.
         }
 
         public mutating func next() async throws -> JSONToken? {
+            var characterIndex = 0
+
             func nextByte() async throws -> UInt8? {
                 defer { peek = nil }
                 if let peek { return peek }
+                defer { characterIndex += 1 }
                 return try await byteSource.next()
             }
 
@@ -90,18 +93,18 @@ public struct AsyncJSONTokenizer<Base: AsyncSequence>: AsyncSequence where Base.
                     }
                     return .null
 
-                case UInt8(ascii: "\""):
-                    var string = Data()
+                case UInt8(ascii: #"""#):
+                    var string: [UInt8] = []
                     while let byte = try await byteSource.next() {
                         switch byte {
-                        case UInt8(ascii: "\\"):
+                        case UInt8(ascii: #"\"#):
                             // Don't worry about what the next character is. At this point, we're not validating
                             // the string, just looking for an unescaped double-quote.
                             string.append(byte)
                             guard let escaped = try await byteSource.next() else { break }
                             string.append(escaped)
 
-                        case UInt8(ascii: "\""):
+                        case UInt8(ascii: #"""#):
                             return .string(string)
 
                         default:
@@ -111,7 +114,7 @@ public struct AsyncJSONTokenizer<Base: AsyncSequence>: AsyncSequence where Base.
                     throw JSONError.dataTruncated
 
                 case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
-                    var number = Data([first])
+                    var number = [first]
                     while let digit = try await byteSource.next() {
                         if numberBytes.contains(digit) {
                             number.append(digit)
@@ -126,7 +129,7 @@ public struct AsyncJSONTokenizer<Base: AsyncSequence>: AsyncSequence where Base.
                     continue
 
                 default:
-                    throw JSONError.unexpectedByte
+                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
                 }
             }
 
@@ -148,7 +151,7 @@ public extension AsyncSequence where Self.Element == UInt8 {
      A non-blocking sequence of  `JSONTokens` created by decoding the elements of `self`.
      */
     @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
-    var jsonTokens: AsyncJSONTokenizer<Self> {
-        AsyncJSONTokenizer(underlyingSequence: self)
+    var jsonTokens: AsyncJSONTokenSequence<Self> {
+        AsyncJSONTokenSequence(underlyingSequence: self)
     }
 }
