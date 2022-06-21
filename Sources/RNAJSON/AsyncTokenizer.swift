@@ -19,6 +19,9 @@ private let numberBytes: [UInt8] = [0x2b,   // +
                                     0x45,   // E
                                     0x65    // e
 ]
+let numberTerminators = whitespaceBytes + [UInt8(ascii:","),
+                                           UInt8(ascii:"]"),
+                                           UInt8(ascii:"}")]
 
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
     public typealias Element = JSONToken
@@ -103,7 +106,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     var string: [UInt8] = []
                     while let byte = try await nextByte() {
                         switch byte {
-                        case UInt8(ascii: #"\"#):
+                        case UInt8(ascii: "\\"):
                             // Don't worry about what the next character is. At this point, we're not validating
                             // the string, just looking for an unescaped double-quote.
                             string.append(byte)
@@ -124,9 +127,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     while let digit = try await nextByte() {
                         if numberBytes.contains(digit) {
                             number.append(digit)
-                        } else {
+                        } else if numberTerminators.contains(digit) {
                             peek = digit
                             break
+                        } else {
+                            throw JSONError.unexpectedCharacter(ascii: digit,
+                                                                characterIndex: characterIndex)
                         }
                     }
                     return .number(number)

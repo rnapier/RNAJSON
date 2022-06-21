@@ -148,7 +148,7 @@ final class JSONTokenizerTests: XCTestCase {
         XCTAssertDeepEqual(result, expected)
     }
 
-    func testCommaAferTheClose() async throws {
+    func testCommaAfterTheClose() async throws {
         let json = Data("""
         ["Comma after the close"],
         """.utf8).async
@@ -209,7 +209,44 @@ final class JSONTokenizerTests: XCTestCase {
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "+"),                                 characterIndex: 25))
     }
 
+    func testIllegalInvocation() async throws {
+        let json = Data("""
+        {"Illegal invocation": alert()}
+        """.utf8).async
 
+        let expected: [JSONToken] =
+        [.objectOpen, "Illegal invocation", .colon]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"),                                 characterIndex: 23))
+    }
+
+    func testLeadingZeros() async throws {
+        let json = Data("""
+        {"Numbers cannot have leading zeroes": 013}
+        """.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, "Numbers cannot have leading zeroes", .colon, .digits("013"), .objectClose]
+
+        let result = try await Array(json.jsonTokens)
+
+        XCTAssertDeepEqual(result, expected)
+    }
+
+    func testNumbersCannotBeHex() async throws {
+        let json = Data("""
+        {"Numbers cannot be hex": 0x14}
+        """.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, "Numbers cannot be hex", .colon]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "x"),                                 characterIndex: 27))
+    }
 }
 
 extension XCTest {
@@ -222,7 +259,9 @@ extension XCTest {
     ) async {
         do {
             _ = try await expression()
-            XCTFail(message(), file: file, line: line)
+            var message = message()
+            if message.isEmpty { message = "Did not throw when expected" }
+            XCTFail(message, file: file, line: line)
         } catch {
             errorHandler(error)
         }
