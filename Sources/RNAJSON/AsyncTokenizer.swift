@@ -29,19 +29,25 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         public typealias Element = JSONToken
 
         var byteSource: Base.AsyncIterator
-        var peek: UInt8? = nil
+        var peek: UInt8? = nil {
+            didSet {
+                if peek != nil { characterIndex -= 1 }
+            }
+        }
+
+        var characterIndex = -1 // Reading increments; starts at 0
 
         internal init(underlyingIterator: Base.AsyncIterator) {
             byteSource = underlyingIterator
         }
 
         public mutating func next() async throws -> JSONToken? {
-            var characterIndex = 0
-
             func nextByte() async throws -> UInt8? {
-                defer { peek = nil }
+                defer {
+                    peek = nil
+                    characterIndex += 1
+                }
                 if let peek { return peek }
-                defer { characterIndex += 1 }
                 return try await byteSource.next()
             }
 
@@ -66,28 +72,28 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return .comma
 
                 case UInt8(ascii: "t"):
-                    guard try await byteSource.next() == UInt8(ascii: "r"),
-                          try await byteSource.next() == UInt8(ascii: "u"),
-                          try await byteSource.next() == UInt8(ascii: "e")
+                    guard try await nextByte() == UInt8(ascii: "r"),
+                          try await nextByte() == UInt8(ascii: "u"),
+                          try await nextByte() == UInt8(ascii: "e")
                     else {
                         throw JSONError.unexpectedByte  // FIXME: Better error
                     }
                     return .true
 
                 case UInt8(ascii: "f"):
-                    guard try await byteSource.next() == UInt8(ascii: "a"),
-                          try await byteSource.next() == UInt8(ascii: "l"),
-                          try await byteSource.next() == UInt8(ascii: "s"),
-                          try await byteSource.next() == UInt8(ascii: "e")
+                    guard try await nextByte() == UInt8(ascii: "a"),
+                          try await nextByte() == UInt8(ascii: "l"),
+                          try await nextByte() == UInt8(ascii: "s"),
+                          try await nextByte() == UInt8(ascii: "e")
                     else {
                         throw JSONError.unexpectedByte  // FIXME: Better error
                     }
                     return .false
 
                 case UInt8(ascii: "n"):
-                    guard try await byteSource.next() == UInt8(ascii: "u"),
-                          try await byteSource.next() == UInt8(ascii: "l"),
-                          try await byteSource.next() == UInt8(ascii: "l")
+                    guard try await nextByte() == UInt8(ascii: "u"),
+                          try await nextByte() == UInt8(ascii: "l"),
+                          try await nextByte() == UInt8(ascii: "l")
                     else {
                         throw JSONError.unexpectedByte  // FIXME: Better error
                     }
@@ -95,13 +101,13 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
                 case UInt8(ascii: #"""#):
                     var string: [UInt8] = []
-                    while let byte = try await byteSource.next() {
+                    while let byte = try await nextByte() {
                         switch byte {
                         case UInt8(ascii: #"\"#):
                             // Don't worry about what the next character is. At this point, we're not validating
                             // the string, just looking for an unescaped double-quote.
                             string.append(byte)
-                            guard let escaped = try await byteSource.next() else { break }
+                            guard let escaped = try await nextByte() else { break }
                             string.append(escaped)
 
                         case UInt8(ascii: #"""#):
@@ -115,7 +121,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
                 case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
                     var number = [first]
-                    while let digit = try await byteSource.next() {
+                    while let digit = try await nextByte() {
                         if numberBytes.contains(digit) {
                             number.append(digit)
                         } else {
@@ -129,7 +135,8 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     continue
 
                 default:
-                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
+                    throw JSONError.unexpectedCharacter(ascii: first,
+                                                        characterIndex: characterIndex)
                 }
             }
 
