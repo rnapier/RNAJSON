@@ -116,15 +116,9 @@ final class JSONTokenizerTests: XCTestCase {
         {unquoted_key: "keys must be quoted"}
         """.utf8).async
 
-        var tokens = json.jsonTokens.makeAsyncIterator()
-
-        let first = try await tokens.next()
-
-        XCTAssertEqual(JSONToken.objectOpen, first)
-
-        await XCTAssertThrowsError(try await tokens.next()) {
-            XCTAssertEqual($0 as? JSONError, .unexpectedCharacter(ascii: UInt8(ascii: "u"), characterIndex: 1))
-        }
+        try await XCTAssert(json.jsonTokens,
+                            returns: [.objectOpen],
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "u"), characterIndex: 1))
     }
 }
 
@@ -141,6 +135,20 @@ extension XCTest {
             XCTFail(message(), file: file, line: line)
         } catch {
             errorHandler(error)
+        }
+    }
+
+    func XCTAssert(_ sequence: AsyncJSONTokenSequence<some AsyncSequence>, returns values: [JSONToken], throws error: JSONError) async throws {
+        var tokens = sequence.makeAsyncIterator()
+        var values = values.makeIterator()
+
+        while let expected = values.next(),
+              let result = try await tokens.next() {
+            XCTAssertEqual(result, expected)
+        }
+
+        await XCTAssertThrowsError(try await tokens.next()) {
+            XCTAssertEqual($0 as? JSONError, .unexpectedCharacter(ascii: UInt8(ascii: "u"), characterIndex: 1))
         }
     }
 }
