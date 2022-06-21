@@ -91,12 +91,13 @@ final class JSONTokenizerTests: XCTestCase {
         let json = Array("""
         ["Unclosed array"
         """.utf8).async
-        let result = try await Array(json.jsonTokens)
 
         let expected: [JSONToken] =
         [.arrayOpen, "Unclosed array"]
 
-        XCTAssertDeepEqual(result, expected)
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEndOfFile)
     }
 
     func testUnquotedKey() async throws {
@@ -164,12 +165,13 @@ final class JSONTokenizerTests: XCTestCase {
         let json = Data("""
         ["Extra close"]]
         """.utf8).async
-        let result = try await Array(json.jsonTokens)
 
         let expected: [JSONToken] =
-        [.arrayOpen, "Extra close", .arrayClose, .arrayClose]
+        [.arrayOpen, "Extra close", .arrayClose]
 
-        XCTAssertDeepEqual(result, expected)
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "]"), characterIndex: 15))
     }
 
     func testExtraCommaObject() async throws {
