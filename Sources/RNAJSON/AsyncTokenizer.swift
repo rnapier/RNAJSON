@@ -20,9 +20,11 @@ private let numberBytes: [UInt8] = [0x2b,   // +
                                     0x45,   // E
                                     0x65    // e
 ]
-let numberTerminators = whitespaceBytes + [._comma,
-                                           ._closebrace,
-                                           ._closebracket]
+private let startNumberBytes: [UInt8] = [UInt8(ascii: "-")] + Array(UInt8(ascii: "0")...UInt8(ascii: "9"))
+
+let numberTerminators = whitespaceBytes + [.comma,
+                                           .closeObject,
+                                           .closeArray]
 
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
     public typealias Element = JSONToken
@@ -47,6 +49,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             byteSource = underlyingIterator
         }
 
+        enum Awaiting {
+            case topLevel, objectKeyOrClose, objectKey, keyValueSeparator, objectValue, objectSeparatorOrClose, arrayValueOrClose, arrayValue, arraySeparatorOrClose, end
+        }
+
+        var awaiting: Awaiting = .topLevel
+
         public mutating func next() async throws -> JSONToken? {
             func nextByte() async throws -> UInt8? {
                 defer {
@@ -57,103 +65,178 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 return try await byteSource.next()
             }
 
-            while let first = try await nextByte() {
+            func nextByteAfterWhitespace() async throws -> UInt8? {
+                repeat {
+                    guard let byte = try await nextByte() else { return nil }
+                    if !whitespaceBytes.contains(byte) { return byte }
+                } while true
+            }
+
+            func consumeContainerOpen(first: UInt8) async throws -> JSONToken {
+                containers.append(first)
+
                 switch first {
-                case UInt8(ascii: "["):
-                    containers.append(first)
+                case .openArray:
+                    awaiting = .arrayValue
                     return .arrayOpen
 
-                case UInt8(ascii: "{"):
-                    containers.append(first)
+                case .openObject:
+                    awaiting = .objectKey
                     return .objectOpen
 
-                case UInt8(ascii: "]"):
-                    guard let open = containers.popLast(), open == ._openbracket else {
-                        throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
-                    }
-                    return .arrayClose
+                default:
+                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
+                }
+            }
 
-                case UInt8(ascii: "}"):
-                    guard let open = containers.popLast(), open == ._openbrace else {
-                        throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
+            func consumeOpenString() async throws -> [UInt8] {
+                var string: [UInt8] = []
+                while let byte = try await nextByte() {
+                    switch byte {
+                    case UInt8(ascii: "\\"):
+                        // Don't worry about what the next character is. At this point, we're not validating
+                        // the string, just looking for an unescaped double-quote.
+                        string.append(byte)
+                        guard let escaped = try await nextByte() else { break }
+                        string.append(escaped)
+
+                    case UInt8(ascii: #"""#):
+                        return string
+
+                    default:
+                        string.append(byte)
+                    }
+                }
+                throw JSONError.unexpectedEndOfFile
+            }
+
+            func consumeDigits(first: UInt8) async throws -> JSONToken {
+                var number = [first]
+                while let digit = try await nextByte() {
+                    if numberBytes.contains(digit) {
+                        number.append(digit)
+                    } else if numberTerminators.contains(digit) {
+                        peek = digit
+                        break
+                    } else {
+                        throw JSONError.unexpectedCharacter(ascii: digit,
+                                                            characterIndex: characterIndex)
+                    }
+                }
+                return .number(number)
+            }
+
+            func assertNextByte(is character: Unicode.Scalar) async throws {
+                guard let byte = try await nextByte() else {
+                    throw JSONError.unexpectedEndOfFile
+                }
+                guard byte == UInt8(ascii: character) else {
+                    throw JSONError.unexpectedCharacter(ascii: byte, characterIndex: characterIndex)
+                }
+            }
+
+            func assertNextBytes(are characters: String) async throws {
+                for character in characters.unicodeScalars {
+                    try await assertNextByte(is: character)
+                }
+            }
+
+            while let first = try await nextByteAfterWhitespace() {
+                switch first {
+                case .openObject where [.topLevel, .objectValue, .arrayValue].contains(awaiting):
+                    containers.append(first)
+                    awaiting = .objectKeyOrClose
+                    return .objectOpen
+
+                case .quote where [.objectKey, .objectKeyOrClose].contains(awaiting):
+                    awaiting = .keyValueSeparator
+                    return .objectKey(try await consumeOpenString())
+
+                case .colon where [.keyValueSeparator].contains(awaiting):
+                    awaiting = .objectValue
+                    continue
+
+                case .quote where [.objectValue].contains(awaiting):
+                    awaiting = .objectSeparatorOrClose
+                    return .string(try await consumeOpenString())
+
+                case let digit where [.objectValue].contains(awaiting) && startNumberBytes.contains(digit):
+                    awaiting = .objectSeparatorOrClose
+                    return try await consumeDigits(first: first)
+
+                case UInt8(ascii: "t") where [.objectValue].contains(awaiting):
+                    awaiting = .objectSeparatorOrClose
+                    try await assertNextBytes(are: "rue")
+                    return .true
+
+                case UInt8(ascii: "f") where [.objectValue].contains(awaiting):
+                    awaiting = .objectSeparatorOrClose
+                    try await assertNextBytes(are: "alse")
+                    return .false
+
+                case UInt8(ascii: "n") where [.objectValue].contains(awaiting):
+                    awaiting = .objectSeparatorOrClose
+                    try await assertNextBytes(are: "ull")
+                    return .null
+
+                case .comma where [.objectSeparatorOrClose].contains(awaiting):
+                    awaiting = .objectKey
+                    continue
+
+                case .closeObject where containers.last == .openObject && [.objectSeparatorOrClose, .objectKeyOrClose].contains(awaiting):
+                    containers.removeLast()
+                    switch containers.last {
+                    case .none: awaiting = .end
+                    case .some(.openObject): awaiting = .objectSeparatorOrClose
+                    case .some(.openArray): awaiting = .arraySeparatorOrClose
+                    default: preconditionFailure()
                     }
                     return .objectClose
 
-                case UInt8(ascii: ":"):
-                    return .colon
+                case .openArray where [.topLevel, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
+                    containers.append(first)
+                    awaiting = .arrayValueOrClose
+                    return .arrayOpen
 
-                case UInt8(ascii: ","):
-                    return .comma
+                case .quote where [.arrayValue, .arrayValueOrClose].contains(awaiting):
+                    awaiting = .arraySeparatorOrClose
+                    return .string(try await consumeOpenString())
 
-                case UInt8(ascii: "t"):
-                    guard try await nextByte() == UInt8(ascii: "r"),
-                          try await nextByte() == UInt8(ascii: "u"),
-                          try await nextByte() == UInt8(ascii: "e")
-                    else {
-                        throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
-                    }
+                case let digit where [.arrayValue, .arrayValueOrClose].contains(awaiting) && startNumberBytes.contains(digit):
+                    awaiting = .arraySeparatorOrClose
+                    return try await consumeDigits(first: first)
+
+                case UInt8(ascii: "t") where [.arrayValue, .arrayValueOrClose].contains(awaiting):
+                    awaiting = .arraySeparatorOrClose
+                    try await assertNextBytes(are: "rue")
                     return .true
 
-                case UInt8(ascii: "f"):
-                    guard try await nextByte() == UInt8(ascii: "a"),
-                          try await nextByte() == UInt8(ascii: "l"),
-                          try await nextByte() == UInt8(ascii: "s"),
-                          try await nextByte() == UInt8(ascii: "e")
-                    else {
-                        throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
-                    }
+                case UInt8(ascii: "f") where [.arrayValue, .arrayValueOrClose].contains(awaiting):
+                    awaiting = .arraySeparatorOrClose
+                    try await assertNextBytes(are: "alse")
                     return .false
 
-                case UInt8(ascii: "n"):
-                    guard try await nextByte() == UInt8(ascii: "u"),
-                          try await nextByte() == UInt8(ascii: "l"),
-                          try await nextByte() == UInt8(ascii: "l")
-                    else {
-                        throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
-                    }
+                case UInt8(ascii: "n") where [.arrayValue, .arrayValueOrClose].contains(awaiting):
+                    awaiting = .arraySeparatorOrClose
+                    try await assertNextBytes(are: "ull")
                     return .null
 
-                case UInt8(ascii: #"""#):
-                    var string: [UInt8] = []
-                    while let byte = try await nextByte() {
-                        switch byte {
-                        case UInt8(ascii: "\\"):
-                            // Don't worry about what the next character is. At this point, we're not validating
-                            // the string, just looking for an unescaped double-quote.
-                            string.append(byte)
-                            guard let escaped = try await nextByte() else { break }
-                            string.append(escaped)
-
-                        case UInt8(ascii: #"""#):
-                            return .string(string)
-
-                        default:
-                            string.append(byte)
-                        }
-                    }
-                    throw JSONError.unexpectedEndOfFile
-
-                case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
-                    var number = [first]
-                    while let digit = try await nextByte() {
-                        if numberBytes.contains(digit) {
-                            number.append(digit)
-                        } else if numberTerminators.contains(digit) {
-                            peek = digit
-                            break
-                        } else {
-                            throw JSONError.unexpectedCharacter(ascii: digit,
-                                                                characterIndex: characterIndex)
-                        }
-                    }
-                    return .number(number)
-
-                case 0x09, 0x0a, 0x0d, 0x20: // consume whitespace
+                case .comma where [.arraySeparatorOrClose].contains(awaiting):
+                    awaiting = .arrayValue
                     continue
 
+                case .closeArray where containers.last == .openArray && [.arraySeparatorOrClose, .arrayValueOrClose].contains(awaiting):
+                    containers.removeLast()
+                    switch containers.last {
+                    case .none: awaiting = .end
+                    case .some(.openObject): awaiting = .objectSeparatorOrClose
+                    case .some(.openArray): awaiting = .arraySeparatorOrClose
+                    default: preconditionFailure()
+                    }
+                    return .arrayClose
+
                 default:
-                    throw JSONError.unexpectedCharacter(ascii: first,
-                                                        characterIndex: characterIndex)
+                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
                 }
             }
 

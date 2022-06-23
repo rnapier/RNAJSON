@@ -9,9 +9,8 @@ public enum JSONToken: Hashable {
     case arrayOpen
     case arrayClose
     case objectOpen
+    case objectKey([UInt8])
     case objectClose
-    case colon
-    case comma
     case `true`
     case `false`
     case null
@@ -22,6 +21,10 @@ public enum JSONToken: Hashable {
 extension JSONToken {
     public static func digits(_ digits: String) -> Self {
         .number(Array(digits.utf8))
+    }
+
+    public static func key(_ key: String) -> Self {
+        .objectKey(Array(key.utf8))
     }
 }
 
@@ -56,35 +59,37 @@ extension JSONToken: ExpressibleByBooleanLiteral {
 }
 
 extension JSONToken: CustomStringConvertible {
+    private func describeString(_ data: ([UInt8])) -> String {
+        let string = String(decoding: data, as: Unicode.UTF8.self)
+        if !string.contains("\u{FFFD}") {
+            if string.contains("\\") {
+                return """
+                        #"\(string)"#
+                        """
+            } else {
+                return """
+                        "\(string)"
+                        """
+            }
+        } else {
+            let bytes = data.map { "\($0)" }.joined(separator: ", ")
+            return """
+                    .string(Data([\(bytes)]))
+                    """
+        }
+    }
+
     public var description: String {
         switch self {
         case .arrayOpen: return ".arrayOpen"
         case .arrayClose: return ".arrayClose"
         case .objectOpen: return ".objectOpen"
+        case .objectKey(let data): return describeString(data)
         case .objectClose: return ".objectClose"
-        case .colon: return ".colon"
-        case .comma: return ".comma"
         case .true: return "true"
         case .false: return "false"
         case .null: return ".null"
-        case .string(let data):
-            let string = String(decoding: data, as: Unicode.UTF8.self)
-            if !string.contains("\u{FFFD}") {
-                if string.contains("\\") {
-                    return """
-                        #"\(string)"#
-                        """
-                } else {
-                    return """
-                        "\(string)"
-                        """
-                }
-            } else {
-                let bytes = data.map { "\($0)" }.joined(separator: ", ")
-                return """
-                    .string(Data([\(bytes)]))
-                    """
-            }
+        case .string(let data): return describeString(data)
 
         case .number(let data):
             let digits = String(decoding: data, as: Unicode.UTF8.self)

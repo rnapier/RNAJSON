@@ -45,7 +45,7 @@ public struct JSONParser {
         var whitespace = 0
         while let next = reader.peek(offset: whitespace) {
             switch next {
-            case ._space, ._tab, ._return, ._newline:
+            case .space, .tab, .return, .newline:
                 whitespace += 1
                 continue
             default:
@@ -65,11 +65,11 @@ public struct JSONParser {
             case UInt8(ascii: "\""):
                 reader.moveReaderIndex(forwardBy: whitespace)
                 return .string(try reader.readString())
-            case ._openbrace:
+            case .openObject:
                 reader.moveReaderIndex(forwardBy: whitespace)
                 let object = try parseObject()
                 return .object(keyValues: object)
-            case ._openbracket:
+            case .openArray:
                 reader.moveReaderIndex(forwardBy: whitespace)
                 let array = try parseArray()
                 return .array(array)
@@ -85,7 +85,7 @@ public struct JSONParser {
                 reader.moveReaderIndex(forwardBy: whitespace)
                 let number = try self.reader.readNumber()
                 return .number(digits: number)
-            case ._space, ._return, ._newline, ._tab:
+            case .space, .return, .newline, .tab:
                 whitespace += 1
                 continue
             default:
@@ -100,7 +100,7 @@ public struct JSONParser {
     // MARK: - Parse Array -
 
     mutating func parseArray() throws -> [JSONValue] {
-        precondition(self.reader.read() == ._openbracket)
+        precondition(self.reader.read() == .openArray)
         guard self.depth < 512 else {
             throw JSONParserError.tooManyNestedArraysOrDictionaries(characterIndex: self.reader.readerIndex - 1)
         }
@@ -109,9 +109,9 @@ public struct JSONParser {
 
         // parse first value or end immediatly
         switch try reader.consumeWhitespace() {
-        case ._space, ._return, ._newline, ._tab:
+        case .space, .return, .newline, .tab:
             preconditionFailure("Expected that all white space is consumed")
-        case ._closebracket:
+        case .closeArray:
             // if the first char after whitespace is a closing bracket, we found an empty array
             self.reader.moveReaderIndex(forwardBy: 1)
             return []
@@ -130,16 +130,16 @@ public struct JSONParser {
             // consume the whitespace after the value before the comma
             let ascii = try reader.consumeWhitespace()
             switch ascii {
-            case ._space, ._return, ._newline, ._tab:
+            case .space, .return, .newline, .tab:
                 preconditionFailure("Expected that all white space is consumed")
-            case ._closebracket:
+            case .closeArray:
                 reader.moveReaderIndex(forwardBy: 1)
                 return array
-            case ._comma:
+            case .comma:
                 // consume the comma
                 reader.moveReaderIndex(forwardBy: 1)
                 // consume the whitespace before the next value
-                if try reader.consumeWhitespace() == ._closebracket {
+                if try reader.consumeWhitespace() == .closeArray {
                     // the foundation json implementation does support trailing commas
                     reader.moveReaderIndex(forwardBy: 1)
                     return array
@@ -154,7 +154,7 @@ public struct JSONParser {
     // MARK: - Object parsing -
 
     mutating func parseObject() throws -> JSONKeyValues {
-        precondition(self.reader.read() == ._openbrace)
+        precondition(self.reader.read() == .openObject)
         guard self.depth < 512 else {
             throw JSONParserError.tooManyNestedArraysOrDictionaries(characterIndex: self.reader.readerIndex - 1)
         }
@@ -163,9 +163,9 @@ public struct JSONParser {
 
         // parse first value or end immediatly
         switch try reader.consumeWhitespace() {
-        case ._space, ._return, ._newline, ._tab:
+        case .space, .return, .newline, .tab:
             preconditionFailure("Expected that all white space is consumed")
-        case ._closebrace:
+        case .closeObject:
             // if the first char after whitespace is a closing bracket, we found an empty array
             self.reader.moveReaderIndex(forwardBy: 1)
             return []
@@ -179,7 +179,7 @@ public struct JSONParser {
         while true {
             let key = try reader.readString()
             let colon = try reader.consumeWhitespace()
-            guard colon == ._colon else {
+            guard colon == .colon else {
                 throw JSONParserError.unexpectedCharacter(ascii: colon, characterIndex: reader.readerIndex)
             }
             reader.moveReaderIndex(forwardBy: 1)
@@ -188,12 +188,12 @@ public struct JSONParser {
 
             let commaOrBrace = try reader.consumeWhitespace()
             switch commaOrBrace {
-            case ._closebrace:
+            case .closeObject:
                 reader.moveReaderIndex(forwardBy: 1)
                 return object
-            case ._comma:
+            case .comma:
                 reader.moveReaderIndex(forwardBy: 1)
-                if try reader.consumeWhitespace() == ._closebrace {
+                if try reader.consumeWhitespace() == .closeObject {
                     // the foundation json implementation does support trailing commas
                     reader.moveReaderIndex(forwardBy: 1)
                     return object
@@ -258,7 +258,7 @@ extension JSONParser {
             var whitespace = 0
             while let ascii = self.peek(offset: whitespace) {
                 switch ascii {
-                case ._space, ._return, ._newline, ._tab:
+                case .space, .return, .newline, .tab:
                     whitespace += 1
                     continue
                 default:
@@ -337,7 +337,7 @@ extension JSONParser {
         }
 
         private mutating func readUTF8StringTillNextUnescapedQuote() throws -> String {
-            guard self.read() == ._quote else {
+            guard self.read() == .quote else {
                 throw JSONParserError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
             }
             var stringStartIndex = self.readerIndex
@@ -415,7 +415,7 @@ extension JSONParser {
         }
 
         private mutating func parseEscapeSequence() throws -> String {
-            precondition(self.read() == ._backslash, "Expected to have an backslash first")
+            precondition(self.read() == .backslash, "Expected to have an backslash first")
             guard let ascii = self.read() else {
                 throw JSONParserError.unexpectedEndOfFile
             }
@@ -610,7 +610,7 @@ extension JSONParser {
                     numberchars += 1
                     pastControlChar = .expOperator
                     numbersSinceControlChar = 0
-                case ._space, ._return, ._newline, ._tab, ._comma, ._closebracket, ._closebrace:
+                case .space, .return, .newline, .tab, .comma, .closeArray, .closeObject:
                     guard numbersSinceControlChar > 0 else {
                         throw JSONParserError.unexpectedCharacter(ascii: byte, characterIndex: readerIndex + numberchars)
                     }
@@ -635,22 +635,22 @@ extension JSONParser {
 
 extension UInt8 {
 
-    internal static let _space = UInt8(ascii: " ")
-    internal static let _return = UInt8(ascii: "\r")
-    internal static let _newline = UInt8(ascii: "\n")
-    internal static let _tab = UInt8(ascii: "\t")
+    internal static let space = UInt8(ascii: " ")
+    internal static let `return` = UInt8(ascii: "\r")
+    internal static let newline = UInt8(ascii: "\n")
+    internal static let tab = UInt8(ascii: "\t")
 
-    internal static let _colon = UInt8(ascii: ":")
-    internal static let _comma = UInt8(ascii: ",")
+    internal static let colon = UInt8(ascii: ":")
+    internal static let comma = UInt8(ascii: ",")
 
-    internal static let _openbrace = UInt8(ascii: "{")
-    internal static let _closebrace = UInt8(ascii: "}")
+    internal static let openObject = UInt8(ascii: "{")
+    internal static let closeObject = UInt8(ascii: "}")
 
-    internal static let _openbracket = UInt8(ascii: "[")
-    internal static let _closebracket = UInt8(ascii: "]")
+    internal static let openArray = UInt8(ascii: "[")
+    internal static let closeArray = UInt8(ascii: "]")
 
-    internal static let _quote = UInt8(ascii: "\"")
-    internal static let _backslash = UInt8(ascii: "\\")
+    internal static let quote = UInt8(ascii: "\"")
+    internal static let backslash = UInt8(ascii: "\\")
 
 }
 
