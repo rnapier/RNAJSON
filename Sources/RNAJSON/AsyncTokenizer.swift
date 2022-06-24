@@ -131,6 +131,15 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 }
             }
 
+            func popContainer() {
+                containers.removeLast()
+                switch containers.last {
+                case .none: awaiting = .end
+                case .some(.object): awaiting = .objectSeparatorOrClose
+                case .some(.array): awaiting = .arraySeparatorOrClose
+                }
+            }
+
             func assertNextByte(is character: Unicode.Scalar) async throws {
                 guard let byte = try await nextByte() else {
                     throw JSONError.unexpectedEndOfFile
@@ -166,12 +175,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     continue
 
                 case .closeObject where containers.last == .object && [.objectSeparatorOrClose, .objectKeyOrClose].contains(awaiting):
-                    containers.removeLast()
-                    switch containers.last {
-                    case .none: awaiting = .end
-                    case .some(.object): awaiting = .objectSeparatorOrClose
-                    case .some(.array): awaiting = .arraySeparatorOrClose
-                    }
+                    popContainer()
                     return .objectClose
 
                 case .openArray where [.start, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
@@ -184,12 +188,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     continue
 
                 case .closeArray where containers.last == .array && [.arraySeparatorOrClose, .arrayValueOrClose].contains(awaiting):
-                    containers.removeLast()
-                    switch containers.last {
-                    case .none: awaiting = .end
-                    case .some(.object): awaiting = .objectSeparatorOrClose
-                    case .some(.array): awaiting = .arraySeparatorOrClose
-                    }
+                    popContainer()
                     return .arrayClose
 
                 case _ where awaiting == .objectValue:
