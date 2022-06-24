@@ -17,9 +17,7 @@ private let numberBytes: [UInt8] = [0x2b,   // +
                                     0x65    // e
 ]
 
-let numberTerminators = whitespaceBytes + [.comma,
-                                           .closeObject,
-                                           .closeArray]
+let terminators = whitespaceBytes + [.comma, .closeObject, .closeArray]
 
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
     public typealias Element = JSONToken
@@ -95,18 +93,17 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 while let digit = try await nextByte() {
                     if numberBytes.contains(digit) {
                         number.append(digit)
-                    } else if numberTerminators.contains(digit) {
+                    } else if terminators.contains(digit) {
                         peek = digit
                         break
                     } else {
-                        throw JSONError.unexpectedCharacter(ascii: digit,
-                                                            characterIndex: characterIndex)
+                        throw JSONError.unexpectedCharacter(ascii: digit, characterIndex: characterIndex)
                     }
                 }
                 return .number(number)
             }
 
-            func consumeValue(first: UInt8) async throws -> JSONToken {
+            func consumeScalarValue(first: UInt8) async throws -> JSONToken {
                 switch first {
                 case .quote:
                     return .string(try await consumeOpenString())
@@ -153,6 +150,13 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 for character in characters.unicodeScalars {
                     try await assertNextByte(is: character)
                 }
+                if let terminator = try await nextByte() {
+                    if terminators.contains(terminator) {
+                        peek = terminator
+                    } else {
+                        throw JSONError.unexpectedCharacter(ascii: terminator, characterIndex: characterIndex)
+                    }
+                }
             }
 
             while let first = try await nextByteAfterWhitespace() {
@@ -193,15 +197,15 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
                 case _ where awaiting == .objectValue:
                     awaiting = .objectSeparatorOrClose
-                    return try await consumeValue(first: first)
+                    return try await consumeScalarValue(first: first)
 
                 case _ where [.arrayValue, .arrayValueOrClose].contains(awaiting):
                     awaiting = .arraySeparatorOrClose
-                    return try await consumeValue(first: first)
+                    return try await consumeScalarValue(first: first)
 
                 case _ where awaiting == .start:
                     awaiting = .end
-                    return try await consumeValue(first: first)
+                    return try await consumeScalarValue(first: first)
 
                 default:
                     throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
