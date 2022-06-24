@@ -44,10 +44,10 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         }
 
         enum Awaiting {
-            case topLevel, objectKeyOrClose, objectKey, keyValueSeparator, objectValue, objectSeparatorOrClose, arrayValueOrClose, arrayValue, arraySeparatorOrClose, end
+            case start, objectKeyOrClose, objectKey, keyValueSeparator, objectValue, objectSeparatorOrClose, arrayValueOrClose, arrayValue, arraySeparatorOrClose, end
         }
 
-        var awaiting: Awaiting = .topLevel
+        var awaiting: Awaiting = .start
 
         enum Container { case object, array }
         var containers: [Container] = []
@@ -148,7 +148,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
             while let first = try await nextByteAfterWhitespace() {
                 switch first {
-                case .openObject where [.topLevel, .objectValue, .arrayValue].contains(awaiting):
+                case .openObject where [.start, .objectValue, .arrayValue].contains(awaiting):
                     containers.append(.object)
                     awaiting = .objectKeyOrClose
                     return .objectOpen
@@ -157,11 +157,11 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     awaiting = .keyValueSeparator
                     return .objectKey(try await consumeOpenString())
 
-                case .colon where [.keyValueSeparator].contains(awaiting):
+                case .colon where awaiting == .keyValueSeparator:
                     awaiting = .objectValue
                     continue
 
-                case .comma where [.objectSeparatorOrClose].contains(awaiting):
+                case .comma where awaiting == .objectSeparatorOrClose:
                     awaiting = .objectKey
                     continue
 
@@ -174,12 +174,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     }
                     return .objectClose
 
-                case .openArray where [.topLevel, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
+                case .openArray where [.start, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
                     containers.append(.array)
                     awaiting = .arrayValueOrClose
                     return .arrayOpen
 
-                case .comma where [.arraySeparatorOrClose].contains(awaiting):
+                case .comma where awaiting == .arraySeparatorOrClose:
                     awaiting = .arrayValue
                     continue
 
@@ -192,7 +192,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     }
                     return .arrayClose
 
-                case _ where [.objectValue].contains(awaiting):
+                case _ where awaiting == .objectValue:
                     awaiting = .objectSeparatorOrClose
                     return try await consumeValue(first: first)
 
@@ -200,7 +200,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     awaiting = .arraySeparatorOrClose
                     return try await consumeValue(first: first)
 
-                case _ where [.topLevel].contains(awaiting):
+                case _ where awaiting == .start:
                     awaiting = .end
                     return try await consumeValue(first: first)
 
