@@ -126,6 +126,32 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 return .number(number)
             }
 
+            func consumeValue(first: UInt8) async throws -> JSONToken {
+                switch first {
+                case .quote:
+                    return .string(try await consumeOpenString())
+
+                case let digit where startNumberBytes.contains(digit):
+                    return try await consumeDigits(first: first)
+
+                case UInt8(ascii: "t"):
+                    try await assertNextBytes(are: "rue")
+                    return .true
+
+                case UInt8(ascii: "f"):
+                    try await assertNextBytes(are: "alse")
+                    return .false
+
+                case UInt8(ascii: "n"):
+                    try await assertNextBytes(are: "ull")
+                    return .null
+
+                default:
+                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
+                }
+            }
+
+
             func assertNextByte(is character: Unicode.Scalar) async throws {
                 guard let byte = try await nextByte() else {
                     throw JSONError.unexpectedEndOfFile
@@ -156,29 +182,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     awaiting = .objectValue
                     continue
 
-                case .quote where [.objectValue].contains(awaiting):
-                    awaiting = .objectSeparatorOrClose
-                    return .string(try await consumeOpenString())
-
-                case let digit where [.objectValue].contains(awaiting) && startNumberBytes.contains(digit):
-                    awaiting = .objectSeparatorOrClose
-                    return try await consumeDigits(first: first)
-
-                case UInt8(ascii: "t") where [.objectValue].contains(awaiting):
-                    awaiting = .objectSeparatorOrClose
-                    try await assertNextBytes(are: "rue")
-                    return .true
-
-                case UInt8(ascii: "f") where [.objectValue].contains(awaiting):
-                    awaiting = .objectSeparatorOrClose
-                    try await assertNextBytes(are: "alse")
-                    return .false
-
-                case UInt8(ascii: "n") where [.objectValue].contains(awaiting):
-                    awaiting = .objectSeparatorOrClose
-                    try await assertNextBytes(are: "ull")
-                    return .null
-
                 case .comma where [.objectSeparatorOrClose].contains(awaiting):
                     awaiting = .objectKey
                     continue
@@ -198,29 +201,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     awaiting = .arrayValueOrClose
                     return .arrayOpen
 
-                case .quote where [.arrayValue, .arrayValueOrClose].contains(awaiting):
-                    awaiting = .arraySeparatorOrClose
-                    return .string(try await consumeOpenString())
-
-                case let digit where [.arrayValue, .arrayValueOrClose].contains(awaiting) && startNumberBytes.contains(digit):
-                    awaiting = .arraySeparatorOrClose
-                    return try await consumeDigits(first: first)
-
-                case UInt8(ascii: "t") where [.arrayValue, .arrayValueOrClose].contains(awaiting):
-                    awaiting = .arraySeparatorOrClose
-                    try await assertNextBytes(are: "rue")
-                    return .true
-
-                case UInt8(ascii: "f") where [.arrayValue, .arrayValueOrClose].contains(awaiting):
-                    awaiting = .arraySeparatorOrClose
-                    try await assertNextBytes(are: "alse")
-                    return .false
-
-                case UInt8(ascii: "n") where [.arrayValue, .arrayValueOrClose].contains(awaiting):
-                    awaiting = .arraySeparatorOrClose
-                    try await assertNextBytes(are: "ull")
-                    return .null
-
                 case .comma where [.arraySeparatorOrClose].contains(awaiting):
                     awaiting = .arrayValue
                     continue
@@ -234,6 +214,14 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     default: preconditionFailure()
                     }
                     return .arrayClose
+
+                case _ where [.objectValue].contains(awaiting):
+                    awaiting = .objectSeparatorOrClose
+                    return try await consumeValue(first: first)
+
+                case _ where [.arrayValue, .arrayValueOrClose].contains(awaiting):
+                    awaiting = .arraySeparatorOrClose
+                    return try await consumeValue(first: first)
 
                 default:
                     throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
