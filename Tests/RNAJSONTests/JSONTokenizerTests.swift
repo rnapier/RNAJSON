@@ -4,45 +4,45 @@ import RNAJSON
 import AsyncAlgorithms
 
 final class JSONTokenizerTests: XCTestCase {
-//    func testSingleDigit() async throws {
-//        let json = Data("""
-//        1
-//        """.utf8).async
-//        let result = try await Array(json.jsonTokens)
-//        XCTAssertEqual(result, [1])
-//    }
-//
-//    func testInteger() async throws {
-//        let json = Data("""
-//        10
-//        """.utf8).async
-//        let result = try await Array(json.jsonTokens)
-//        XCTAssertEqual(result, [10])
-//    }
-//
-//    func testFloat() async throws {
-//        let json = Data("""
-//        10.1
-//        """.utf8).async
-//        let result = try await Array(json.jsonTokens)
-//        XCTAssertEqual(result, [10.1])
-//    }
-//
-//    func testSingleLetter() async throws {
-//        let json = Data("""
-//        "a"
-//        """.utf8).async
-//        let result = try await Array(json.jsonTokens)
-//        XCTAssertEqual(result, ["a"])
-//    }
-//
-//    func testString() async throws {
-//        let json = Data("""
-//        "testString"
-//        """.utf8).async
-//        let result = try await Array(json.jsonTokens)
-//        XCTAssertEqual(result, ["testString"])
-//    }
+    func testSingleDigit() async throws {
+        let json = Data("""
+        1
+        """.utf8).async
+        let result = try await Array(json.jsonTokens)
+        XCTAssertEqual(result, [1])
+    }
+
+    func testInteger() async throws {
+        let json = Data("""
+        10
+        """.utf8).async
+        let result = try await Array(json.jsonTokens)
+        XCTAssertEqual(result, [10])
+    }
+
+    func testFloat() async throws {
+        let json = Data("""
+        10.1
+        """.utf8).async
+        let result = try await Array(json.jsonTokens)
+        XCTAssertEqual(result, [10.1])
+    }
+
+    func testSingleLetter() async throws {
+        let json = Data("""
+        "a"
+        """.utf8).async
+        let result = try await Array(json.jsonTokens)
+        XCTAssertEqual(result, ["a"])
+    }
+
+    func testString() async throws {
+        let json = Data("""
+        "testString"
+        """.utf8).async
+        let result = try await Array(json.jsonTokens)
+        XCTAssertEqual(result, ["testString"])
+    }
 
     func testCompactArray() async throws {
         let json = Data("""
@@ -73,19 +73,6 @@ final class JSONTokenizerTests: XCTestCase {
 
         XCTAssertDeepEqual(result, expected)
     }
-
-//    func testBareString() async throws {
-//        let json = Array("""
-//        "A JSON payload should be an object or array, not a string."
-//        """.utf8).async
-//
-//        let result = try await Array(json.jsonTokens)
-//
-//        let expected: [JSONToken] =
-//        ["A JSON payload should be an object or array, not a string."]
-//
-//        XCTAssertDeepEqual(result, expected)
-//    }
 
     func testUnclosedArray() async throws {
         let json = Array("""

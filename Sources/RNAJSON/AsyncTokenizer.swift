@@ -2,11 +2,7 @@ public enum JSONError: Swift.Error, Hashable {
     case unexpectedCharacter(ascii: UInt8, characterIndex: Int)
     case unexpectedEndOfFile
 
-//    case unexpectedByte// (at: Int, found: [UInt8])
-//    case unexpectedToken // (at: Int, expected: [JSONToken], found: JSONToken)
-//    case dataTruncated
     case typeMismatch
-//    case dataCorrupted
     case missingValue
 }
 
@@ -20,7 +16,6 @@ private let numberBytes: [UInt8] = [0x2b,   // +
                                     0x45,   // E
                                     0x65    // e
 ]
-private let startNumberBytes: [UInt8] = [UInt8(ascii: "-")] + Array(UInt8(ascii: "0")...UInt8(ascii: "9"))
 
 let numberTerminators = whitespaceBytes + [.comma,
                                            .closeObject,
@@ -131,7 +126,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 case .quote:
                     return .string(try await consumeOpenString())
 
-                case let digit where startNumberBytes.contains(digit):
+                case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
                     return try await consumeDigits(first: first)
 
                 case UInt8(ascii: "t"):
@@ -150,7 +145,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
                 }
             }
-
 
             func assertNextByte(is character: Unicode.Scalar) async throws {
                 guard let byte = try await nextByte() else {
@@ -221,6 +215,10 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
                 case _ where [.arrayValue, .arrayValueOrClose].contains(awaiting):
                     awaiting = .arraySeparatorOrClose
+                    return try await consumeValue(first: first)
+
+                case _ where [.topLevel].contains(awaiting):
+                    awaiting = .end
                     return try await consumeValue(first: first)
 
                 default:
