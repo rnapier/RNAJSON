@@ -38,7 +38,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
         var characterIndex = -1 // Reading increments; starts at 0
 
-        var containers: [UInt8] = []
 
         internal init(underlyingIterator: Base.AsyncIterator) {
             byteSource = underlyingIterator
@@ -49,6 +48,9 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         }
 
         var awaiting: Awaiting = .topLevel
+
+        enum Container { case object, array }
+        var containers: [Container] = []
 
         public mutating func next() async throws -> JSONToken? {
             func nextByte() async throws -> UInt8? {
@@ -65,23 +67,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     guard let byte = try await nextByte() else { return nil }
                     if !whitespaceBytes.contains(byte) { return byte }
                 } while true
-            }
-
-            func consumeContainerOpen(first: UInt8) async throws -> JSONToken {
-                containers.append(first)
-
-                switch first {
-                case .openArray:
-                    awaiting = .arrayValue
-                    return .arrayOpen
-
-                case .openObject:
-                    awaiting = .objectKey
-                    return .objectOpen
-
-                default:
-                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
-                }
             }
 
             func consumeOpenString() async throws -> [UInt8] {
@@ -164,7 +149,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             while let first = try await nextByteAfterWhitespace() {
                 switch first {
                 case .openObject where [.topLevel, .objectValue, .arrayValue].contains(awaiting):
-                    containers.append(first)
+                    containers.append(.object)
                     awaiting = .objectKeyOrClose
                     return .objectOpen
 
@@ -180,18 +165,17 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     awaiting = .objectKey
                     continue
 
-                case .closeObject where containers.last == .openObject && [.objectSeparatorOrClose, .objectKeyOrClose].contains(awaiting):
+                case .closeObject where containers.last == .object && [.objectSeparatorOrClose, .objectKeyOrClose].contains(awaiting):
                     containers.removeLast()
                     switch containers.last {
                     case .none: awaiting = .end
-                    case .some(.openObject): awaiting = .objectSeparatorOrClose
-                    case .some(.openArray): awaiting = .arraySeparatorOrClose
-                    default: preconditionFailure()
+                    case .some(.object): awaiting = .objectSeparatorOrClose
+                    case .some(.array): awaiting = .arraySeparatorOrClose
                     }
                     return .objectClose
 
                 case .openArray where [.topLevel, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
-                    containers.append(first)
+                    containers.append(.array)
                     awaiting = .arrayValueOrClose
                     return .arrayOpen
 
@@ -199,13 +183,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     awaiting = .arrayValue
                     continue
 
-                case .closeArray where containers.last == .openArray && [.arraySeparatorOrClose, .arrayValueOrClose].contains(awaiting):
+                case .closeArray where containers.last == .array && [.arraySeparatorOrClose, .arrayValueOrClose].contains(awaiting):
                     containers.removeLast()
                     switch containers.last {
                     case .none: awaiting = .end
-                    case .some(.openObject): awaiting = .objectSeparatorOrClose
-                    case .some(.openArray): awaiting = .arraySeparatorOrClose
-                    default: preconditionFailure()
+                    case .some(.object): awaiting = .objectSeparatorOrClose
+                    case .some(.array): awaiting = .arraySeparatorOrClose
                     }
                     return .arrayClose
 
