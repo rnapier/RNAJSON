@@ -84,7 +84,7 @@ extension JSONToken: CustomStringConvertible {
         case .arrayOpen: return ".arrayOpen"
         case .arrayClose: return ".arrayClose"
         case .objectOpen: return ".objectOpen"
-        case .objectKey(let data): return describeString(data)
+        case .objectKey(let data): return ".key(\(describeString(data)))"
         case .objectClose: return ".objectClose"
         case .true: return "true"
         case .false: return "false"

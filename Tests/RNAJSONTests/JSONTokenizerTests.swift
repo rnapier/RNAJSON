@@ -305,8 +305,96 @@ final class JSONTokenizerTests: XCTestCase {
                                                                 index: 29))
     }
 
-}
+    // fail16
+    func testBackslashOutsideString() async throws {
+        let json = Data(#"""
+        [\naked]
+        """#.utf8).async
 
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "\\"),
+                                                         index: 1))
+    }
+
+    // fail17
+    func testIllegalBackslashEscapeWithLeadingZero() async throws {
+        let json = Data(#"""
+        ["Illegal backslash escape: \017"]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "0"),
+                                                         index: 29))
+    }
+
+    // fail19
+    func testMissingColon() async throws {
+        let json = Data(#"""
+        {"Missing colon" null}
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, .key("Missing colon")]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "n"),
+                                                         index: 17))
+    }
+
+    // fail20
+    func testDoubleColon() async throws {
+        let json = Data(#"""
+        {"Double colon":: null}
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, .key("Double colon")]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: ":"),
+                                                         index: 16))
+    }
+
+    // fail21
+    func testCommaInsteadOfColon() async throws {
+        let json = Data(#"""
+        {"Comma instead of colon", null}
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, .key("Comma instead of colon")]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
+                                                         index: 25))
+    }
+
+    // fail22
+    func testColonInsteadOfComma() async throws {
+        let json = Data(#"""
+        ["Colon instead of comma": false]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen, "Colon instead of comma"]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: ":"),
+                                                         index: 25))
+    }
+}
 extension XCTest {
     func XCTAssertThrowsError<T: Sendable>(
         _ expression: @autoclosure () async throws -> T,
