@@ -327,7 +327,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     continue
 
                 case .comma where awaiting == .objectSeparatorOrClose:
-                    awaiting = .objectKey
+                    awaiting = strict ? .objectKey : .objectKeyOrClose
                     continue
 
                 case .closeObject where containers.last == .object && [.objectSeparatorOrClose, .objectKeyOrClose].contains(awaiting):

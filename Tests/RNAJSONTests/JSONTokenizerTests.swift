@@ -79,24 +79,22 @@ final class JSONTokenizerTests: XCTestCase {
     func testComplexJSON() async throws {
         let url = Bundle.module.url(forResource: "json.org/pass1.json", withExtension: nil)!
         let json = try Data(contentsOf: url).async
-        let result = try await Array(json.jsonTokens)
 
         let expected: [JSONToken] =
         [.arrayOpen, "JSON Test Pattern pass1", .objectOpen, .key("object with 1 member"), .arrayOpen, "array with 1 element", .arrayClose, .objectClose, .objectOpen, .objectClose, .arrayOpen, .arrayClose, -42, true, false, .null, .objectOpen, .key("integer"), 1234567890, .key("real"), .digits("-9876.543210"), .key("e"), .digits("0.123456789e-12"), .key("E"), .digits("1.234567890E+34"), .key(""), .digits("23456789012E66"), .key("zero"), 0, .key("one"), 1, .key("space"), " ", .key("quote"), #"\""#, .key("backslash"), #"\\"#, .key("controls"), #"\b\f\n\r\t"#, .key("slash"), #"/ & \/"#, .key("alpha"), "abcdefghijklmnopqrstuvwyz", .key("ALPHA"), "ABCDEFGHIJKLMNOPQRSTUVWYZ", .key("digit"), "0123456789", .key("0123456789"), "digit", .key("special"), "`1~!@#$%^&*()_+-={':[,]}|;.</>?", .key("hex"), #"\u0123\u4567\u89AB\uCDEF\uabcd\uef4A"#, .key("true"), true, .key("false"), false, .key("null"), .null, .key("array"), .arrayOpen, .arrayClose, .key("object"), .objectOpen, .objectClose, .key("address"), "50 St. James Street", .key("url"), "http://www.JSON.org/", .key("comment"), "// /* <!-- --", .key("# -- --> */"), " ", .key(" s p a c e d "), .arrayOpen, 1, 2, 3, 4, 5, 6, 7, .arrayClose, .key("compact"), .arrayOpen, 1, 2, 3, 4, 5, 6, 7, .arrayClose, .key("jsontext"), #"{\"object with 1 member\":[\"array with 1 element\"]}"#, .key("quotes"), #"&#34; \u0022 %22 0x22 034 &#x22;"#, .key(#"\/\\\"\uCAFE\uBABE\uAB98\uFCDE\ubcda\uef4A\b\f\n\r\t`1~!@#$%^&*()_+-=[]{}|;:',./<>?"#), "A key can be any string", .objectClose, 0.5, 98.6, 99.44, 1066, .digits("1e1"), .digits("0.1e1"), .digits("1e-1"), .digits("1e00"), .digits("2e+00"), .digits("2e-00"), "rosebud", .arrayClose]
 
-        XCTAssertDeepEqual(result, expected)
+        try await XCTAssertDeepEqual(json.jsonTokens, expected)
     }
 
     // pass2
     func testDeepJSON() async throws {
         let url = Bundle.module.url(forResource: "json.org/pass2.json", withExtension: nil)!
         let json = try Data(contentsOf: url).async
-        let result = try await Array(json.jsonTokens)
 
         let expected: [JSONToken] =
         repeatElement(JSONToken.arrayOpen, count: 19) + ["Not too deep"] + repeatElement(JSONToken.arrayClose, count: 19)
 
-        XCTAssertDeepEqual(result, expected)
+        try await XCTAssertDeepEqual(json.jsonTokens, expected)
     }
 
     // fail1
@@ -167,8 +165,7 @@ final class JSONTokenizerTests: XCTestCase {
         let expected: [JSONToken] =
         [.arrayOpen, "extra comma", .arrayClose]
 
-        let result = try await Array(json.jsonTokens)
-        XCTAssertDeepEqual(result, expected)
+        try await XCTAssertDeepEqual(json.jsonTokens, expected)
     }
 
     // fail5
@@ -232,7 +229,7 @@ final class JSONTokenizerTests: XCTestCase {
     }
 
     // fail9
-    func testExtraCommaObject() async throws {
+    func testExtraCommaObjectStrict() async throws {
         let json = Data("""
         {"Extra comma": true,}
         """.utf8).async
@@ -240,9 +237,21 @@ final class JSONTokenizerTests: XCTestCase {
         let expected: [JSONToken] =
         [.objectOpen, .key("Extra comma"), .true]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json, strict: true),
                             returns: expected,
                             throws: .missingKey(Location(line: 1, column: 21, index: 21)))
+    }
+
+    // fail9 -- JSONSerialization allows trailing comma
+    func testExtraCommaObjectAllowed() async throws {
+        let json = Data("""
+        {"Extra comma": true,}
+        """.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, .key("Extra comma"), .true, .objectClose]
+
+        try await XCTAssertDeepEqual(json.jsonTokens, expected)
     }
 
     // fail10
@@ -575,7 +584,8 @@ extension XCTest {
         }
     }
 
-    func XCTAssertDeepEqual(_ lhs: [JSONToken], _ rhs: [JSONToken]) {
+    func XCTAssertDeepEqual(_ lhs: AsyncJSONTokenSequence<some Any>, _ rhs: [JSONToken]) async throws {
+        let lhs = try await Array(lhs)
         XCTAssertEqual(lhs.count, rhs.count)
         for (lhs, rhs) in zip(lhs, rhs) {
             XCTAssertEqual(lhs, rhs)
