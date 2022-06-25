@@ -3,6 +3,8 @@ import XCTest
 import RNAJSON
 import AsyncAlgorithms
 
+typealias Location = JSONError.Location
+
 final class JSONTokenizerTests: XCTestCase {
     func testSingleDigit() async throws {
         let json = Data("""
@@ -70,7 +72,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"), line: 1, column: 4))
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"), Location(line: 1, column: 4)))
     }
 
     // pass1
@@ -124,7 +126,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedEndOfFile(line: 1, column: 17))
+                            throws: .unexpectedEndOfFile(Location(line: 1, column: 17)))
     }
 
     // fail3
@@ -138,7 +140,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .missingKey(line: 1, column: 1))
+                            throws: .missingKey(Location(line: 1, column: 1)))
     }
 
     // fail4
@@ -153,7 +155,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "]"),
-                                                         line: 1, column: 15))
+                                                         Location(line: 1, column: 15)))
     }
 
     // fail5
@@ -168,7 +170,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
-                                                         line: 1, column: 22))
+                                                         Location(line: 1, column: 22)))
     }
 
     // fail6
@@ -183,7 +185,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
-                                                         line: 1, column: 4))
+                                                         Location(line: 1, column: 4)))
     }
 
     // fail7
@@ -198,7 +200,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
-                                                         line: 1, column: 25))
+                                                         Location(line: 1, column: 25)))
     }
 
     // fail8
@@ -213,7 +215,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "]"),
-                                                         line: 1, column: 15))
+                                                         Location(line: 1, column: 15)))
     }
 
     // fail9
@@ -227,7 +229,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .missingKey(line: 1, column: 21))
+                            throws: .missingKey(Location(line: 1, column: 21)))
     }
 
     // fail10
@@ -242,7 +244,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "\""),
-                                                         line: 1, column: 34))
+                                                         Location(line: 1, column: 34)))
     }
 
     // fail11
@@ -257,7 +259,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "+"),
-                                                         line: 1, column: 25))
+                                                         Location(line: 1, column: 25)))
     }
 
     // fail12
@@ -272,7 +274,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"),
-                                                         line: 1, column: 23))
+                                                         Location(line: 1, column: 23)))
     }
 
     // fail13
@@ -286,7 +288,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .numberWithLeadingZero(line: 1, column: 40))
+                            throws: .numberWithLeadingZero(Location(line: 1, column: 40)))
     }
 
     // fail14
@@ -301,7 +303,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "x"),
-                                                         line: 1, column: 27))
+                                                         Location(line: 1, column: 27)))
     }
 
     // fail15
@@ -316,7 +318,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "x"),
-                                                                line: 1, column: 29))
+                                                                Location(line: 1, column: 29)))
     }
 
     // fail16
@@ -331,7 +333,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "\\"),
-                                                         line: 1, column: 1))
+                                                         Location(line: 1, column: 1)))
     }
 
     // fail17
@@ -346,7 +348,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "0"),
-                                                                line: 1, column: 29))
+                                                                Location(line: 1, column: 29)))
     }
 
     // fail19
@@ -361,7 +363,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "n"),
-                                                         line: 1, column: 17))
+                                                         Location(line: 1, column: 17)))
     }
 
     // fail20
@@ -376,7 +378,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ":"),
-                                                         line: 1, column: 16))
+                                                         Location(line: 1, column: 16)))
     }
 
     // fail21
@@ -391,7 +393,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
-                                                         line: 1, column: 25))
+                                                         Location(line: 1, column: 25)))
     }
 
     // fail22
@@ -406,7 +408,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ":"),
-                                                         line: 1, column: 25))
+                                                         Location(line: 1, column: 25)))
     }
 
     // fail23
@@ -422,7 +424,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "t"),
-                                                         line: 1, column: 17))
+                                                         Location(line: 1, column: 17)))
     }
 
     // fail24
@@ -437,7 +439,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "'"),
-                                                         line: 1, column: 1))
+                                                         Location(line: 1, column: 1)))
     }
 
     // fail25
@@ -450,7 +452,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\t"),
-                                                                       line: 1, column: 2))
+                                                                       Location(line: 1, column: 2)))
     }
 
     // fail26 (in test case, there are no tabs)
@@ -465,7 +467,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: " "),
-                                                                line: 1, column: 6))
+                                                                Location(line: 1, column: 6)))
     }
 
     // fail27
@@ -481,7 +483,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\n"),
-                                                                       line: 2, column: 0))
+                                                                       Location(line: 2, column: 0)))
     }
 
     // fail28
@@ -497,7 +499,7 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "\n"),
-                                                                line: 2, column: 0))
+                                                                Location(line: 2, column: 0)))
     }
 
     // fail29

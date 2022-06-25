@@ -1,12 +1,20 @@
 public enum JSONError: Swift.Error, Hashable {
-    case unexpectedCharacter(ascii: UInt8, line: Int, column: Int)
-    case unexpectedEndOfFile(line: Int, column: Int)
-    case numberWithLeadingZero(line: Int, column: Int)
-    case unexpectedEscapedCharacter(ascii: UInt8, line: Int, column: Int)
-    case unescapedControlCharacterInString(ascii: UInt8, line: Int, column: Int)
-    case invalidHexDigitSequence(String, line: Int, column: Int)
+    public struct Location: Hashable {
+        public var line: Int
+        public var column: Int
+        public init(line: Int, column: Int) {
+            self.line = line
+            self.column = column
+        }
+    }
+    case unexpectedCharacter(ascii: UInt8, Location)
+    case unexpectedEndOfFile(Location)
+    case numberWithLeadingZero(Location)
+    case unexpectedEscapedCharacter(ascii: UInt8, Location)
+    case unescapedControlCharacterInString(ascii: UInt8, Location)
+    case invalidHexDigitSequence(String, Location)
     case jsonFragmentDisallowed
-    case missingKey(line: Int, column: Int)
+    case missingKey(Location)
 
     case typeMismatch
     case missingValue
@@ -17,6 +25,7 @@ private let hexDigits = Array(UInt8(ascii: "0")...UInt8(ascii: "9")) +
 Array(UInt8(ascii: "a")...UInt8(ascii: "f")) +
 Array(UInt8(ascii: "A")...UInt8(ascii: "F"))
 
+private typealias Location = JSONError.Location
 
 let terminators = whitespaceBytes + [.comma, .closeObject, .closeArray]
 
@@ -91,13 +100,13 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         return output
 
                     case 0 ... 31:
-                        throw JSONError.unescapedControlCharacterInString(ascii: byte, line: line, column: column)
+                        throw JSONError.unescapedControlCharacterInString(ascii: byte, Location(line: line, column: column))
 
                     case UInt8(ascii: "\\"):
                         output.append(byte)
 
                         guard let escaped = try await nextByte() else {
-                            throw JSONError.unexpectedEndOfFile(line: line, column: column)
+                            throw JSONError.unexpectedEndOfFile(Location(line: line, column: column))
                         }
                         switch escaped {
                         case .quote, .backslash, UInt8(ascii: "/"), UInt8(ascii: "b"), UInt8(ascii: "f"), UInt8(ascii: "n"), UInt8(ascii: "r"), UInt8(ascii: "t"):
@@ -108,19 +117,19 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                                   let digit2 = try await nextByte(),
                                   let digit3 = try await nextByte(),
                                   let digit4 = try await nextByte() else {
-                                      throw JSONError.unexpectedEndOfFile(line: line, column: column)
+                                      throw JSONError.unexpectedEndOfFile(Location(line: line, column: column))
                                   }
 
                             let digits = [digit1, digit2, digit3, digit4]
                             guard digits.allSatisfy(hexDigits.contains) else {
                                 let hexString = String(decoding: digits, as: Unicode.UTF8.self)
-                                throw JSONError.invalidHexDigitSequence(hexString, line: line, column: column)
+                                throw JSONError.invalidHexDigitSequence(hexString, Location(line: line, column: column))
                             }
 
                             output += digits
 
                         default:
-                            throw JSONError.unexpectedEscapedCharacter(ascii: escaped, line: line, column: column)
+                            throw JSONError.unexpectedEscapedCharacter(ascii: escaped, Location(line: line, column: column))
                         }
                     default:
                         output.append(byte)
@@ -163,7 +172,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     switch byte {
                     case UInt8(ascii: "0"):
                         if hasLeadingZero {
-                            throw JSONError.numberWithLeadingZero(line: line, column: column)
+                            throw JSONError.numberWithLeadingZero(Location(line: line, column: column))
                         }
                         if numbersSinceControlChar == 0, pastControlChar == .operand {
                             // the number started with a minus. this is the leading zero.
@@ -173,13 +182,13 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         numbersSinceControlChar += 1
                     case UInt8(ascii: "1") ... UInt8(ascii: "9"):
                         if hasLeadingZero {
-                            throw JSONError.numberWithLeadingZero(line: line, column: column)
+                            throw JSONError.numberWithLeadingZero(Location(line: line, column: column))
                         }
                         digits.append(byte)
                         numbersSinceControlChar += 1
                     case UInt8(ascii: "."):
                         guard numbersSinceControlChar > 0, pastControlChar == .operand else {
-                            throw JSONError.unexpectedCharacter(ascii: byte, line: line, column: column)
+                            throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column))
                         }
 
                         digits.append(byte)
@@ -191,7 +200,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         guard numbersSinceControlChar > 0,
                               pastControlChar == .operand || pastControlChar == .decimalPoint
                         else {
-                            throw JSONError.unexpectedCharacter(ascii: byte, line: line, column: column)
+                            throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column))
                         }
 
                         digits.append(byte)
@@ -200,7 +209,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         numbersSinceControlChar = 0
                     case UInt8(ascii: "+"), UInt8(ascii: "-"):
                         guard numbersSinceControlChar == 0, pastControlChar == .exp else {
-                            throw JSONError.unexpectedCharacter(ascii: byte, line: line, column: column)
+                            throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column))
                         }
 
                         digits.append(byte)
@@ -208,17 +217,17 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         numbersSinceControlChar = 0
                     case .space, .return, .newline, .tab, .comma, .closeArray, .closeObject:
                         guard numbersSinceControlChar > 0 else {
-                            throw JSONError.unexpectedCharacter(ascii: byte, line: line, column: column)
+                            throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column))
                         }
                         peek = byte
                         return .number(digits)
                     default:
-                        throw JSONError.unexpectedCharacter(ascii: byte, line: line, column: column)
+                        throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column))
                     }
                 }
                 
                 guard numbersSinceControlChar > 0 else {
-                    throw JSONError.unexpectedEndOfFile(line: line, column: column)
+                    throw JSONError.unexpectedEndOfFile(Location(line: line, column: column))
                 }
 
                 return .number(digits)
@@ -245,7 +254,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return .null
 
                 default:
-                    throw JSONError.unexpectedCharacter(ascii: first, line: line, column: column)
+                    throw JSONError.unexpectedCharacter(ascii: first, Location(line: line, column: column))
                 }
             }
 
@@ -260,10 +269,10 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
             func assertNextByte(is character: Unicode.Scalar) async throws {
                 guard let byte = try await nextByte() else {
-                    throw JSONError.unexpectedEndOfFile(line: line, column: column)
+                    throw JSONError.unexpectedEndOfFile(Location(line: line, column: column))
                 }
                 guard byte == UInt8(ascii: character) else {
-                    throw JSONError.unexpectedCharacter(ascii: byte, line: line, column: column)
+                    throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column))
                 }
             }
 
@@ -277,7 +286,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     if terminators.contains(terminator) {
                         peek = terminator
                     } else {
-                        throw JSONError.unexpectedCharacter(ascii: terminator, line: line, column: column)
+                        throw JSONError.unexpectedCharacter(ascii: terminator, Location(line: line, column: column))
                     }
                 }
             }
@@ -309,7 +318,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return .objectClose
 
                 case _ where [.objectKey, .objectKeyOrClose].contains(awaiting):
-                    throw JSONError.missingKey(line: line, column: column)
+                    throw JSONError.missingKey(Location(line: line, column: column))
 
                 case .openArray where [.start, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
                     containers.append(.array)
@@ -340,12 +349,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     throw JSONError.jsonFragmentDisallowed
 
                 default:
-                    throw JSONError.unexpectedCharacter(ascii: first, line: line, column: column)
+                    throw JSONError.unexpectedCharacter(ascii: first, Location(line: line, column: column))
                 }
             }
 
             guard containers.isEmpty else {
-                throw JSONError.unexpectedEndOfFile(line: line, column: column)
+                throw JSONError.unexpectedEndOfFile(Location(line: line, column: column))
             }
 
             return nil
