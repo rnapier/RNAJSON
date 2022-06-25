@@ -1,6 +1,7 @@
 public enum JSONError: Swift.Error, Hashable {
-    case unexpectedCharacter(ascii: UInt8, characterIndex: Int)
+    case unexpectedCharacter(ascii: UInt8, index: Int)
     case unexpectedEndOfFile
+    case numberWithLeadingZero(index: Int)
 
     case typeMismatch
     case missingValue
@@ -8,7 +9,6 @@ public enum JSONError: Swift.Error, Hashable {
 
 
 internal let whitespaceBytes: [UInt8] = [0x09, 0x0a, 0x0d, 0x20]
-private let newlineBytes: [UInt8] = [0x0a, 0x0d]
 private let numberBytes: [UInt8] = [0x2b,   // +
                                     0x2d,   // -
                                     0x2e,   // .
@@ -30,12 +30,11 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         var byteSource: Base.AsyncIterator
         var peek: UInt8? = nil {
             didSet {
-                if peek != nil { characterIndex -= 1 }
+                if peek != nil { index -= 1 }
             }
         }
 
-        var characterIndex = -1 // Reading increments; starts at 0
-
+        var index = -1 // Reading increments; starts at 0
 
         internal init(underlyingIterator: Base.AsyncIterator) {
             byteSource = underlyingIterator
@@ -50,21 +49,21 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         enum Container { case object, array }
         var containers: [Container] = []
 
+        enum ControlCharacter {
+            case operand
+            case decimalPoint
+            case exp
+            case expOperator
+        }
+
         public mutating func next() async throws -> JSONToken? {
             func nextByte() async throws -> UInt8? {
                 defer {
                     peek = nil
-                    characterIndex += 1
+                    index += 1
                 }
                 if let peek { return peek }
                 return try await byteSource.next()
-            }
-
-            func nextByteAfterWhitespace() async throws -> UInt8? {
-                repeat {
-                    guard let byte = try await nextByte() else { return nil }
-                    if !whitespaceBytes.contains(byte) { return byte }
-                } while true
             }
 
             func consumeOpenString() async throws -> [UInt8] {
@@ -89,18 +88,96 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             }
 
             func consumeDigits(first: UInt8) async throws -> JSONToken {
-                var number = [first]
-                while let digit = try await nextByte() {
-                    if numberBytes.contains(digit) {
-                        number.append(digit)
-                    } else if terminators.contains(digit) {
-                        peek = digit
-                        break
-                    } else {
-                        throw JSONError.unexpectedCharacter(ascii: digit, characterIndex: characterIndex)
+                // Based heavily on stdlib JSONParser:
+                // https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/JSONSerialization%2BParser.swift
+                // Code primarily by Fabian Fett (fabianfett@apple.com)
+                var pastControlChar: ControlCharacter = .operand
+                var numbersSinceControlChar: UInt = 0
+                var hasLeadingZero = false
+
+                // parse first character
+
+                switch first {
+                case UInt8(ascii: "0"):
+                    numbersSinceControlChar = 1
+                    pastControlChar = .operand
+                    hasLeadingZero = true
+                case UInt8(ascii: "1") ... UInt8(ascii: "9"):
+                    numbersSinceControlChar = 1
+                    pastControlChar = .operand
+                case UInt8(ascii: "-"):
+                    numbersSinceControlChar = 0
+                    pastControlChar = .operand
+                default:
+                    preconditionFailure("Why was this function called, if there is no 0...9 or -")
+                }
+
+                var digits: [UInt8] = [first]
+
+                // parse everything else
+                while let byte = try await nextByte() {
+                    switch byte {
+                    case UInt8(ascii: "0"):
+                        if hasLeadingZero {
+                            throw JSONError.numberWithLeadingZero(index: index)
+                        }
+                        if numbersSinceControlChar == 0, pastControlChar == .operand {
+                            // the number started with a minus. this is the leading zero.
+                            hasLeadingZero = true
+                        }
+                        digits.append(byte)
+                        numbersSinceControlChar += 1
+                    case UInt8(ascii: "1") ... UInt8(ascii: "9"):
+                        if hasLeadingZero {
+                            throw JSONError.numberWithLeadingZero(index: index)
+                        }
+                        digits.append(byte)
+                        numbersSinceControlChar += 1
+                    case UInt8(ascii: "."):
+                        guard numbersSinceControlChar > 0, pastControlChar == .operand else {
+                            throw JSONError.unexpectedCharacter(ascii: byte, index: index)
+                        }
+
+                        digits.append(byte)
+                        hasLeadingZero = false
+                        pastControlChar = .decimalPoint
+                        numbersSinceControlChar = 0
+
+                    case UInt8(ascii: "e"), UInt8(ascii: "E"):
+                        guard numbersSinceControlChar > 0,
+                              pastControlChar == .operand || pastControlChar == .decimalPoint
+                        else {
+                            throw JSONError.unexpectedCharacter(ascii: byte, index: index)
+                        }
+
+                        digits.append(byte)
+                        hasLeadingZero = false
+                        pastControlChar = .exp
+                        numbersSinceControlChar = 0
+                    case UInt8(ascii: "+"), UInt8(ascii: "-"):
+                        guard numbersSinceControlChar == 0, pastControlChar == .exp else {
+                            throw JSONError.unexpectedCharacter(ascii: byte, index: index)
+                        }
+
+                        digits.append(byte)
+                        pastControlChar = .expOperator
+                        numbersSinceControlChar = 0
+                    case .space, .return, .newline, .tab, .comma, .closeArray, .closeObject:
+                        guard numbersSinceControlChar > 0 else {
+                            throw JSONError.unexpectedCharacter(ascii: byte, index: index)
+                        }
+                        peek = byte
+                        return .number(digits)
+                    default:
+                        throw JSONError.unexpectedCharacter(ascii: byte, index: index)
                     }
                 }
-                return .number(number)
+                
+                guard numbersSinceControlChar > 0 else {
+                    throw JSONError.unexpectedEndOfFile
+                }
+
+                return .number(digits)
             }
 
             func consumeScalarValue(first: UInt8) async throws -> JSONToken {
@@ -124,7 +201,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return .null
 
                 default:
-                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
+                    throw JSONError.unexpectedCharacter(ascii: first, index: index)
                 }
             }
 
@@ -142,7 +219,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     throw JSONError.unexpectedEndOfFile
                 }
                 guard byte == UInt8(ascii: character) else {
-                    throw JSONError.unexpectedCharacter(ascii: byte, characterIndex: characterIndex)
+                    throw JSONError.unexpectedCharacter(ascii: byte, index: index)
                 }
             }
 
@@ -154,13 +231,16 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     if terminators.contains(terminator) {
                         peek = terminator
                     } else {
-                        throw JSONError.unexpectedCharacter(ascii: terminator, characterIndex: characterIndex)
+                        throw JSONError.unexpectedCharacter(ascii: terminator, index: index)
                     }
                 }
             }
 
-            while let first = try await nextByteAfterWhitespace() {
+            while let first = try await nextByte() {
                 switch first {
+                case .tab, .newline, .return, .space:
+                    continue
+
                 case .openObject where [.start, .objectValue, .arrayValue].contains(awaiting):
                     containers.append(.object)
                     awaiting = .objectKeyOrClose
@@ -208,7 +288,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return try await consumeScalarValue(first: first)
 
                 default:
-                    throw JSONError.unexpectedCharacter(ascii: first, characterIndex: characterIndex)
+                    throw JSONError.unexpectedCharacter(ascii: first, index: index)
                 }
             }
 
