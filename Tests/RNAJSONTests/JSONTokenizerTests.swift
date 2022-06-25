@@ -72,7 +72,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"), Location(line: 1, column: 4, index: 4)))
+                            throws: .corruptedLiteral(expected: "true", Location(line: 1, column: 4, index: 4)))
     }
 
     // pass1
@@ -384,8 +384,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "n"),
-                                                         Location(line: 1, column: 17, index: 17)))
+                            throws: .missingObjectValue(Location(line: 1, column: 17, index: 17)))
     }
 
     // fail20
@@ -414,8 +413,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
-                                                         Location(line: 1, column: 25, index: 25)))
+                            throws: .missingObjectValue(Location(line: 1, column: 25, index: 25)))
     }
 
     // fail22
@@ -445,7 +443,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "t"),
+                            throws: .corruptedLiteral(expected: "true",
                                                          Location(line: 1, column: 17, index: 17)))
     }
 

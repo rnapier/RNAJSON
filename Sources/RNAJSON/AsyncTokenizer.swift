@@ -17,8 +17,11 @@ public enum JSONError: Swift.Error, Hashable {
     case invalidHexDigitSequence(String, Location)
     case jsonFragmentDisallowed
     case missingKey(Location)
+    case missingObjectValue(Location)
     case missingExponent(Location)
+    case corruptedLiteral(expected: String, Location)
 
+    // Split these; they're for JSON
     case typeMismatch
     case missingValue
 }
@@ -174,7 +177,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     }
                 }
 
-                throw JSONParserError.unexpectedEndOfFile
+                throw JSONError.unexpectedEndOfFile(location)
             }
 
             func consumeDigits(first: UInt8) async throws -> JSONToken {
@@ -259,8 +262,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                             switch pastControlChar {
                             case .exp, .expOperator: throw JSONError.missingExponent(location)
                             default:
-                                throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column, index: index))
-
+                                throw JSONError.unexpectedCharacter(ascii: byte, location)
                             }
                         }
                         peek = byte
@@ -287,15 +289,15 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return try await consumeDigits(first: first)
 
                 case UInt8(ascii: "t"):
-                    try await assertNextBytes(are: "rue")
+                    try await consumeOpenLiteral("true")
                     return .true
 
                 case UInt8(ascii: "f"):
-                    try await assertNextBytes(are: "alse")
+                    try await consumeOpenLiteral("false")
                     return .false
 
                 case UInt8(ascii: "n"):
-                    try await assertNextBytes(are: "ull")
+                    try await consumeOpenLiteral("null")
                     return .null
 
                 default:
@@ -321,17 +323,20 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 }
             }
 
-            // FIXME: Make clearer; this also checks for a terminator
-            func assertNextBytes(are characters: String) async throws {
-                for character in characters.unicodeScalars {
-                    try await assertNextByte(is: character)
+            func consumeOpenLiteral(_ literal: String) async throws {
+                do {
+                    for character in literal.unicodeScalars.dropFirst() {
+                        try await assertNextByte(is: character)
+                    }
+                } catch JSONError.unexpectedCharacter {
+                    throw JSONError.corruptedLiteral(expected: literal, location)
                 }
 
                 if let terminator = try await nextByte() {
                     if terminators.contains(terminator) {
                         peek = terminator
                     } else {
-                        throw JSONError.unexpectedCharacter(ascii: terminator, location)
+                        throw JSONError.corruptedLiteral(expected: literal, location)
                     }
                 }
             }
@@ -389,6 +394,9 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
                 case _ where awaiting.contains(.objectKey):
                     throw JSONError.missingKey(location)
+
+                case _ where awaiting.contains(.keyValueSeparator):
+                    throw JSONError.missingObjectValue(location)
 
                 default:
                     throw JSONError.unexpectedCharacter(ascii: first, location)
