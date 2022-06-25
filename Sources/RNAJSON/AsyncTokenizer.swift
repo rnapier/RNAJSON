@@ -32,6 +32,38 @@ private typealias Location = JSONError.Location
 
 let terminators = whitespaceBytes + [.comma, .closeObject, .closeArray]
 
+struct Awaiting: OptionSet {
+    let rawValue: Int
+    static let start = Awaiting(rawValue: 1 << 0)
+    static let objectKey = Awaiting(rawValue: 1 << 1)
+    static let keyValueSeparator = Awaiting(rawValue: 1 << 2)
+    static let objectValue = Awaiting(rawValue: 1 << 3)
+    static let objectSeparator = Awaiting(rawValue: 1 << 4)
+    static let objectClose = Awaiting(rawValue: 1 << 5)
+    static let arrayValue = Awaiting(rawValue: 1 << 6)
+    static let arraySeparator = Awaiting(rawValue: 1 << 7)
+    static let arrayClose = Awaiting(rawValue: 1 << 8)
+    static let end = Awaiting(rawValue: 1 << 9)
+}
+
+extension Awaiting: CustomStringConvertible {
+    var description: String {
+        var values: [String] = []
+        if contains(.start) { values.append("start") }
+        if contains(.objectKey) { values.append("objectKey") }
+        if contains(.keyValueSeparator) { values.append("keyValueSeparator") }
+        if contains(.objectValue) { values.append("objectValue") }
+        if contains(.objectSeparator) { values.append("objectSeparator") }
+        if contains(.objectClose) { values.append("objectClose") }
+        if contains(.arrayValue) { values.append("arrayValue") }
+        if contains(.arraySeparator) { values.append("arraySeparator") }
+        if contains(.arrayClose) { values.append("arrayClose") }
+        if contains(.end) { values.append("end") }
+
+        return "[\(values.joined(separator: ", "))]"
+    }
+}
+
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
     public typealias Element = JSONToken
 
@@ -61,10 +93,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         internal init(underlyingIterator: Base.AsyncIterator, strict: Bool) {
             byteSource = underlyingIterator
             self.strict = strict
-        }
-
-        enum Awaiting {
-            case start, objectKeyOrClose, objectKey, keyValueSeparator, objectValue, objectSeparatorOrClose, arrayValueOrClose, arrayValue, arraySeparatorOrClose, end
         }
 
         var awaiting: Awaiting = .start
@@ -279,8 +307,8 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 containers.removeLast()
                 switch containers.last {
                 case .none: awaiting = .end
-                case .some(.object): awaiting = .objectSeparatorOrClose
-                case .some(.array): awaiting = .arraySeparatorOrClose
+                case .some(.object): awaiting = [.objectSeparator, .objectClose]
+                case .some(.array): awaiting = [.arraySeparator, .arrayClose]
                 }
             }
 
@@ -313,57 +341,54 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 case .tab, .newline, .return, .space:
                     continue
 
-                case .openObject where [.start, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
+                case .openObject where !awaiting.isDisjoint(with: [.start, .objectValue, .arrayValue]):
                     containers.append(.object)
-                    awaiting = .objectKeyOrClose
+                    awaiting = [.objectKey, .objectClose]
                     return .objectOpen
 
-                case .quote where [.objectKey, .objectKeyOrClose].contains(awaiting):
+                case .quote where awaiting.contains(.objectKey):
                     awaiting = .keyValueSeparator
                     return .objectKey(try await consumeOpenString())
 
-                case .colon where awaiting == .keyValueSeparator:
+                case .colon where awaiting.contains(.keyValueSeparator):
                     awaiting = .objectValue
-                    continue
 
-                case .comma where awaiting == .objectSeparatorOrClose:
-                    awaiting = strict ? .objectKey : .objectKeyOrClose
-                    continue
+                case .comma where awaiting.contains(.objectSeparator):
+                    awaiting = strict ? [.objectKey] : [.objectKey, .objectClose]
 
-                case .closeObject where containers.last == .object && [.objectSeparatorOrClose, .objectKeyOrClose].contains(awaiting):
+                case .closeObject where containers.last == .object && awaiting.contains(.objectClose):
                     popContainer()
                     return .objectClose
 
-                case _ where [.objectKey, .objectKeyOrClose].contains(awaiting):
-                    throw JSONError.missingKey(location)
-
-                case .openArray where [.start, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
+                case .openArray where !awaiting.isDisjoint(with: [.start, .objectValue, .arrayValue]):
                     containers.append(.array)
-                    awaiting = .arrayValueOrClose
+                    awaiting = [.arrayValue, .arrayClose]
                     return .arrayOpen
 
-                case .comma where awaiting == .arraySeparatorOrClose:
-                    awaiting = strict ? .arrayValue : .arrayValueOrClose
-                    continue
+                case .comma where awaiting.contains(.arraySeparator):
+                    awaiting = strict ? [.arrayValue] : [.arrayValue, .arrayClose]
 
-                case .closeArray where containers.last == .array && [.arraySeparatorOrClose, .arrayValueOrClose].contains(awaiting):
+                case .closeArray where containers.last == .array && awaiting.contains(.arrayClose):
                     popContainer()
                     return .arrayClose
 
-                case _ where awaiting == .objectValue:
-                    awaiting = .objectSeparatorOrClose
+                case _ where awaiting.contains(.objectValue):
+                    awaiting = [.objectSeparator, .objectClose]
                     return try await consumeScalarValue(first: first)
 
-                case _ where [.arrayValue, .arrayValueOrClose].contains(awaiting):
-                    awaiting = .arraySeparatorOrClose
+                case _ where awaiting.contains(.arrayValue):
+                    awaiting = [.arraySeparator, .arrayClose]
                     return try await consumeScalarValue(first: first)
 
-                case _ where awaiting == .start && !strict:
+                case _ where !strict && awaiting.contains(.start):
                     awaiting = .end
                     return try await consumeScalarValue(first: first)
 
-                case _ where awaiting == .start && strict:
+                case _ where strict && awaiting.contains(.start):
                     throw JSONError.jsonFragmentDisallowed
+
+                case _ where awaiting.contains(.objectKey):
+                    throw JSONError.missingKey(location)
 
                 default:
                     throw JSONError.unexpectedCharacter(ascii: first, location)
