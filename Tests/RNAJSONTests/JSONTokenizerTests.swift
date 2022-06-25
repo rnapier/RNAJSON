@@ -394,6 +394,111 @@ final class JSONTokenizerTests: XCTestCase {
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ":"),
                                                          index: 25))
     }
+
+    // fail23
+    // FIXME: Improve error?
+    func testBadValue() async throws {
+        let json = Data(#"""
+        ["Bad value", truth]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen, "Bad value"]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "t"),
+                                                         index: 17))
+    }
+
+    // fail24
+    func testSingleQuote() async throws {
+        let json = Data(#"""
+        ['single quote']
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "'"),
+                                                         index: 1))
+    }
+
+    // fail25
+    func testTabCharacterInString() async throws {
+        let json = Data("[\"\ttab\tcharacter\tin\tstring\t\"]".utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\t"),
+                                                         index: 2))
+    }
+
+    // fail26 (in test case, there are no tabs)
+    func testEscapedSpacesInString() async throws {
+        let json = Data(#"""
+        ["tab\   character\   in\  string\  "]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: " "),
+                                                         index: 6))
+    }
+
+    // fail27
+    func testLineBreakInString() async throws {
+        let json = Data(#"""
+        ["line
+        break"]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\n"),
+                                                         index: 6))
+    }
+
+    // fail28
+    func testEscapedLineBreakInString() async throws {
+        let json = Data(#"""
+        ["line\
+        break"]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "\n"),
+                                                                index: 7))
+    }
+
+    // fail29
+    func testInvalidExpNumber() async throws {
+        let json = Data(#"""
+        [0e]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .numberWithLeadingZero(index: 1))
+    }
 }
 extension XCTest {
     func XCTAssertThrowsError<T: Sendable>(

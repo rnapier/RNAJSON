@@ -5,7 +5,7 @@ public enum JSONError: Swift.Error, Hashable {
     case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
     case unescapedControlCharacterInString(ascii: UInt8, index: Int)
     case invalidHexDigitSequence(String, index: Int)
-
+    
     case typeMismatch
     case missingValue
 }
