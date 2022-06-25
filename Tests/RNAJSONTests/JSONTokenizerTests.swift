@@ -44,6 +44,14 @@ final class JSONTokenizerTests: XCTestCase {
         XCTAssertEqual(result, ["testString"])
     }
 
+    func testQuote() async throws {
+        let json = Data(#"""
+        "\""
+        """#.utf8).async
+        let result = try await Array(json.jsonTokens)
+        XCTAssertEqual(result, [#"\""#])
+    }
+
     func testCompactArray() async throws {
         let json = Data("""
         [1,2,3]
@@ -267,6 +275,7 @@ final class JSONTokenizerTests: XCTestCase {
                             throws: .numberWithLeadingZero(index: 40))
     }
 
+    // fail14
     func testNumbersCannotBeHex() async throws {
         let json = Data("""
         {"Numbers cannot be hex": 0x14}
@@ -281,6 +290,20 @@ final class JSONTokenizerTests: XCTestCase {
                                                          index: 27))
     }
 
+    // fail15
+    func testIllegalBackslashEscape() async throws {
+        let json = Data(#"""
+        ["Illegal backslash escape: \x15"]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "x"),
+                                                                index: 29))
+    }
 
 }
 

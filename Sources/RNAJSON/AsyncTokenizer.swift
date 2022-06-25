@@ -2,20 +2,19 @@ public enum JSONError: Swift.Error, Hashable {
     case unexpectedCharacter(ascii: UInt8, index: Int)
     case unexpectedEndOfFile
     case numberWithLeadingZero(index: Int)
+    case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
+    case unescapedControlCharacterInString(ascii: UInt8, index: Int)
+    case invalidHexDigitSequence(String, index: Int)
 
     case typeMismatch
     case missingValue
 }
 
-
 internal let whitespaceBytes: [UInt8] = [0x09, 0x0a, 0x0d, 0x20]
-private let numberBytes: [UInt8] = [0x2b,   // +
-                                    0x2d,   // -
-                                    0x2e,   // .
-                                    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, // 0-9
-                                    0x45,   // E
-                                    0x65    // e
-]
+private let hexDigits = Array(UInt8(ascii: "0")...UInt8(ascii: "9")) +
+Array(UInt8(ascii: "a")...UInt8(ascii: "f")) +
+Array(UInt8(ascii: "A")...UInt8(ascii: "F"))
+
 
 let terminators = whitespaceBytes + [.comma, .closeObject, .closeArray]
 
@@ -67,24 +66,53 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             }
 
             func consumeOpenString() async throws -> [UInt8] {
-                var string: [UInt8] = []
+                var output: [UInt8] = []
+
                 while let byte = try await nextByte() {
                     switch byte {
+                    case UInt8(ascii: "\""):
+                        return output
+
+                    case 0 ... 31:
+                        throw JSONError.unescapedControlCharacterInString(ascii: byte, index: index)
+
                     case UInt8(ascii: "\\"):
-                        // Don't worry about what the next character is. At this point, we're not validating
-                        // the string, just looking for an unescaped double-quote.
-                        string.append(byte)
-                        guard let escaped = try await nextByte() else { break }
-                        string.append(escaped)
+                        output.append(byte)
 
-                    case UInt8(ascii: #"""#):
-                        return string
+                        guard let escaped = try await nextByte() else {
+                            throw JSONError.unexpectedEndOfFile
+                        }
+                        switch escaped {
+                        case .quote, .backslash, UInt8(ascii: "/"), UInt8(ascii: "b"), UInt8(ascii: "f"), UInt8(ascii: "n"), UInt8(ascii: "r"), UInt8(ascii: "t"):
+                            output.append(escaped)
+                        case UInt8(ascii: "u"):
+                            output.append(escaped)
+                            let startIndex = index
+                            guard let digit1 = try await nextByte(),
+                                  let digit2 = try await nextByte(),
+                                  let digit3 = try await nextByte(),
+                                  let digit4 = try await nextByte() else {
+                                      throw JSONError.unexpectedEndOfFile
+                                  }
 
+                            let digits = [digit1, digit2, digit3, digit4]
+                            guard digits.allSatisfy(hexDigits.contains) else {
+                                let hexString = String(decoding: digits, as: Unicode.UTF8.self)
+                                throw JSONError.invalidHexDigitSequence(hexString, index: startIndex)
+                            }
+
+                            output += digits
+
+                        default:
+                            throw JSONError.unexpectedEscapedCharacter(ascii: escaped, index: index)
+                        }
                     default:
-                        string.append(byte)
+                        output.append(byte)
+                        continue
                     }
                 }
-                throw JSONError.unexpectedEndOfFile
+
+                throw JSONParserError.unexpectedEndOfFile
             }
 
             func consumeDigits(first: UInt8) async throws -> JSONToken {
@@ -223,10 +251,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 }
             }
 
+            // FIXME: Make clearer; this also checks for a terminator
             func assertNextBytes(are characters: String) async throws {
                 for character in characters.unicodeScalars {
                     try await assertNextByte(is: character)
                 }
+
                 if let terminator = try await nextByte() {
                     if terminators.contains(terminator) {
                         peek = terminator
