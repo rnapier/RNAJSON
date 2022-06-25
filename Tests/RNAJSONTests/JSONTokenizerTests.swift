@@ -503,18 +503,18 @@ final class JSONTokenizerTests: XCTestCase {
     }
 
     // fail29
-//    func testInvalidExpNumber() async throws {
-//        let json = Data(#"""
-//        [0e]
-//        """#.utf8).async
-//
-//        let expected: [JSONToken] =
-//        [.arrayOpen]
-//
-//        try await XCTAssert(json.jsonTokens,
-//                            returns: expected,
-//                            throws: .numberWithLeadingZero(index: 1))
-//    }
+    func testInvalidExpNumber() async throws {
+        let json = Data(#"""
+        [0e]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .missingExponent(Location(line: 1, column: 3, index: 3)))
+    }
 }
 extension XCTest {
     func XCTAssertThrowsError<T: Sendable>(
