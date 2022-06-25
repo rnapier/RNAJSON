@@ -108,7 +108,7 @@ final class JSONTokenizerTests: XCTestCase {
         let expected: [JSONToken] =
         []
 
-        let tokens = AsyncJSONTokenSequence(json, allowFragments: false)
+        let tokens = AsyncJSONTokenSequence(json, strict: true)
 
         try await XCTAssert(tokens,
                             returns: expected,
@@ -514,6 +514,20 @@ final class JSONTokenizerTests: XCTestCase {
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
                             throws: .missingExponent(Location(line: 1, column: 3, index: 3)))
+    }
+
+    // fail30
+    func testInvalidExpNumberWithOperator() async throws {
+        let json = Data(#"""
+        [0e+]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .missingExponent(Location(line: 1, column: 4, index: 4)))
     }
 }
 extension XCTest {

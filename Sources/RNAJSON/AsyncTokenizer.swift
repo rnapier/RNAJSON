@@ -37,12 +37,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
     var base: Base
 
-    var allowFragments: Bool
+    var strict: Bool
 
     public struct AsyncIterator: AsyncIteratorProtocol {
         public typealias Element = JSONToken
 
-        var allowFragments: Bool
+        var strict: Bool
         var byteSource: Base.AsyncIterator
         var peek: UInt8? = nil {
             didSet {
@@ -58,9 +58,9 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         var index = -1 // Reading increments; starts at 0
         var location: JSONError.Location { Location(line: line, column: column, index: index) }
 
-        internal init(underlyingIterator: Base.AsyncIterator, allowFragments: Bool) {
+        internal init(underlyingIterator: Base.AsyncIterator, strict: Bool) {
             byteSource = underlyingIterator
-            self.allowFragments = allowFragments
+            self.strict = strict
         }
 
         enum Awaiting {
@@ -216,6 +216,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         hasLeadingZero = false
                         pastControlChar = .exp
                         numbersSinceControlChar = 0
+
                     case UInt8(ascii: "+"), UInt8(ascii: "-"):
                         guard numbersSinceControlChar == 0, pastControlChar == .exp else {
                             throw JSONError.unexpectedCharacter(ascii: byte, location)
@@ -224,10 +225,11 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         digits.append(byte)
                         pastControlChar = .expOperator
                         numbersSinceControlChar = 0
+                        
                     case .space, .return, .newline, .tab, .comma, .closeArray, .closeObject:
                         guard numbersSinceControlChar > 0 else {
                             switch pastControlChar {
-                            case .exp: throw JSONError.missingExponent(location)
+                            case .exp, .expOperator: throw JSONError.missingExponent(location)
                             default:
                                 throw JSONError.unexpectedCharacter(ascii: byte, Location(line: line, column: column, index: index))
 
@@ -356,11 +358,11 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     awaiting = .arraySeparatorOrClose
                     return try await consumeScalarValue(first: first)
 
-                case _ where awaiting == .start && allowFragments:
+                case _ where awaiting == .start && !strict:
                     awaiting = .end
                     return try await consumeScalarValue(first: first)
 
-                case _ where awaiting == .start && !allowFragments:
+                case _ where awaiting == .start && strict:
                     throw JSONError.jsonFragmentDisallowed
 
                 default:
@@ -377,12 +379,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        return AsyncIterator(underlyingIterator: base.makeAsyncIterator(), allowFragments: allowFragments)
+        return AsyncIterator(underlyingIterator: base.makeAsyncIterator(), strict: strict)
     }
 
-    public init(_ base: Base, allowFragments: Bool = true) {
+    public init(_ base: Base, strict: Bool = false) {
         self.base = base
-        self.allowFragments = allowFragments
+        self.strict = strict
     }
 }
 
