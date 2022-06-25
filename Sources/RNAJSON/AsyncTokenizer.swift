@@ -313,7 +313,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 case .tab, .newline, .return, .space:
                     continue
 
-                case .openObject where [.start, .objectValue, .arrayValue].contains(awaiting):
+                case .openObject where [.start, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
                     containers.append(.object)
                     awaiting = .objectKeyOrClose
                     return .objectOpen
@@ -343,7 +343,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return .arrayOpen
 
                 case .comma where awaiting == .arraySeparatorOrClose:
-                    awaiting = .arrayValue
+                    awaiting = strict ? .arrayValue : .arrayValueOrClose
                     continue
 
                 case .closeArray where containers.last == .array && [.arraySeparatorOrClose, .arrayValueOrClose].contains(awaiting):

@@ -144,7 +144,7 @@ final class JSONTokenizerTests: XCTestCase {
     }
 
     // fail4
-    func testExtraComma() async throws {
+    func testExtraCommaStrict() async throws {
         let json = Data("""
         ["extra comma",]
         """.utf8).async
@@ -152,10 +152,23 @@ final class JSONTokenizerTests: XCTestCase {
         let expected: [JSONToken] =
         [.arrayOpen, "extra comma"]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json, strict: true),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "]"),
                                                          Location(line: 1, column: 15, index: 15)))
+    }
+
+    // fail4 -- JSONSerialization allows trailing comma
+    func testExtraCommaAllowed() async throws {
+        let json = Data("""
+        ["extra comma",]
+        """.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen, "extra comma", .arrayClose]
+
+        let result = try await Array(json.jsonTokens)
+        XCTAssertDeepEqual(result, expected)
     }
 
     // fail5
