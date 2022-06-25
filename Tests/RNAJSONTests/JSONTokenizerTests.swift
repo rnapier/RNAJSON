@@ -138,8 +138,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "u"),
-                                                         line: 1, column: 1))
+                            throws: .missingKey(line: 1, column: 1))
     }
 
     // fail4
@@ -228,8 +227,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "}"),
-                                                         line: 1, column: 21))
+                            throws: .missingKey(line: 1, column: 21))
     }
 
     // fail10

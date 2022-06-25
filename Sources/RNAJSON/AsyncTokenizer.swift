@@ -6,6 +6,7 @@ public enum JSONError: Swift.Error, Hashable {
     case unescapedControlCharacterInString(ascii: UInt8, line: Int, column: Int)
     case invalidHexDigitSequence(String, line: Int, column: Int)
     case jsonFragmentDisallowed
+    case missingKey(line: Int, column: Int)
 
     case typeMismatch
     case missingValue
@@ -103,7 +104,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                             output.append(escaped)
                         case UInt8(ascii: "u"):
                             output.append(escaped)
-                            let startColumn = column
                             guard let digit1 = try await nextByte(),
                                   let digit2 = try await nextByte(),
                                   let digit3 = try await nextByte(),
@@ -307,6 +307,9 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 case .closeObject where containers.last == .object && [.objectSeparatorOrClose, .objectKeyOrClose].contains(awaiting):
                     popContainer()
                     return .objectClose
+
+                case _ where [.objectKey, .objectKeyOrClose].contains(awaiting):
+                    throw JSONError.missingKey(line: line, column: column)
 
                 case .openArray where [.start, .objectValue, .arrayValue, .arrayValueOrClose].contains(awaiting):
                     containers.append(.array)
