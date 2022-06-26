@@ -689,7 +689,7 @@ final class JSONTokenizerTests: XCTestCase {
     }
 
     // fail33
-    func testsBraceMismatch() async throws {
+    func testBraceMismatch() async throws {
         let json = Data(#"""
         ["mismatch"}
         """#.utf8).async
@@ -702,7 +702,8 @@ final class JSONTokenizerTests: XCTestCase {
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "}"), Location(line: 1, column: 11, index: 11)))
     }
 }
-extension XCTest {
+
+private extension XCTest {
     func XCTAssertThrowsError<T: Sendable>(
         _ expression: @autoclosure () async throws -> T,
         _ message: @autoclosure () -> String = "",

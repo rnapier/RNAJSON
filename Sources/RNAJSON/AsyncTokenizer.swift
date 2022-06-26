@@ -35,36 +35,10 @@ private typealias Location = JSONError.Location
 
 let terminators = whitespaceBytes + [.comma, .closeObject, .closeArray]
 
-private struct Awaiting: OptionSet {
-    let rawValue: Int
-    static let start = Awaiting(rawValue: 1 << 0)
-    static let objectKey = Awaiting(rawValue: 1 << 1)
-    static let keyValueSeparator = Awaiting(rawValue: 1 << 2)
-    static let objectValue = Awaiting(rawValue: 1 << 3)
-    static let objectSeparator = Awaiting(rawValue: 1 << 4)
-    static let objectClose = Awaiting(rawValue: 1 << 5)
-    static let arrayValue = Awaiting(rawValue: 1 << 6)
-    static let arraySeparator = Awaiting(rawValue: 1 << 7)
-    static let arrayClose = Awaiting(rawValue: 1 << 8)
-    static let end = Awaiting(rawValue: 1 << 9)
-}
-
-extension Awaiting: CustomStringConvertible {
-    var description: String {
-        var values: [String] = []
-        if contains(.start) { values.append("start") }
-        if contains(.objectKey) { values.append("objectKey") }
-        if contains(.keyValueSeparator) { values.append("keyValueSeparator") }
-        if contains(.objectValue) { values.append("objectValue") }
-        if contains(.objectSeparator) { values.append("objectSeparator") }
-        if contains(.objectClose) { values.append("objectClose") }
-        if contains(.arrayValue) { values.append("arrayValue") }
-        if contains(.arraySeparator) { values.append("arraySeparator") }
-        if contains(.arrayClose) { values.append("arrayClose") }
-        if contains(.end) { values.append("end") }
-
-        return "[\(values.joined(separator: ", "))]"
-    }
+enum Awaiting: Hashable {
+    case start, end
+    case objectKey, keyValueSeparator, objectValue, objectSeparator, objectClose
+    case arrayValue, arraySeparator, arrayClose
 }
 
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
@@ -98,7 +72,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             self.strict = strict
         }
 
-        private var awaiting: Awaiting = .start
+        private var awaiting: Set<Awaiting> = [.start]
 
         enum Container { case object, array }
         var containers: [Container] = []
@@ -399,7 +373,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             func popContainer() {
                 containers.removeLast()
                 switch containers.last {
-                case .none: awaiting = .end
+                case .none: awaiting = [.end]
                 case .some(.object): awaiting = [.objectSeparator, .objectClose]
                 case .some(.array): awaiting = [.arraySeparator, .arrayClose]
                 }
@@ -443,11 +417,11 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return .objectOpen
 
                 case .quote where awaiting.contains(.objectKey):
-                    awaiting = .keyValueSeparator
+                    awaiting = [.keyValueSeparator]
                     return .objectKey(try await consumeOpenString())
 
                 case .colon where awaiting.contains(.keyValueSeparator):
-                    awaiting = .objectValue
+                    awaiting = [.objectValue]
 
                 case .comma where awaiting.contains(.objectSeparator):
                     awaiting = strict ? [.objectKey] : [.objectKey, .objectClose]
@@ -477,7 +451,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     return try await consumeScalarValue(first: first)
 
                 case _ where !strict && awaiting.contains(.start):
-                    awaiting = .end
+                    awaiting = [.end]
                     return try await consumeScalarValue(first: first)
 
                 case _ where strict && awaiting.contains(.start):
@@ -520,4 +494,33 @@ public extension AsyncSequence where Self.Element == UInt8 {
     var jsonTokens: AsyncJSONTokenSequence<Self> {
         AsyncJSONTokenSequence(self)
     }
+}
+
+extension UInt8 {
+
+    internal static let space = UInt8(ascii: " ")
+    internal static let `return` = UInt8(ascii: "\r")
+    internal static let newline = UInt8(ascii: "\n")
+    internal static let tab = UInt8(ascii: "\t")
+
+    internal static let colon = UInt8(ascii: ":")
+    internal static let comma = UInt8(ascii: ",")
+
+    internal static let openObject = UInt8(ascii: "{")
+    internal static let closeObject = UInt8(ascii: "}")
+
+    internal static let openArray = UInt8(ascii: "[")
+    internal static let closeArray = UInt8(ascii: "]")
+
+    internal static let quote = UInt8(ascii: "\"")
+    internal static let backslash = UInt8(ascii: "\\")
+
+}
+
+extension Array where Element == UInt8 {
+
+    internal static let _true = [UInt8(ascii: "t"), UInt8(ascii: "r"), UInt8(ascii: "u"), UInt8(ascii: "e")]
+    internal static let _false = [UInt8(ascii: "f"), UInt8(ascii: "a"), UInt8(ascii: "l"), UInt8(ascii: "s"), UInt8(ascii: "e")]
+    internal static let _null = [UInt8(ascii: "n"), UInt8(ascii: "u"), UInt8(ascii: "l"), UInt8(ascii: "l")]
+
 }
