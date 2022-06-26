@@ -135,8 +135,8 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 if isFirstByteHighSurrogate == 0xD800 {
                     // if we have a high surrogate we expect a low surrogate next
                     let highSurrogateBitPattern = bitPattern
-                    guard let escapeChar = try await nextByte(), escapeChar == .backslash,
-                          let uChar = try await nextByte(), uChar == UInt8(ascii: "u")
+                    guard try await nextByte() == .backslash,
+                          try await nextByte() == UInt8(ascii: "u")
                     else {
                         throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: string, location)
                     }
@@ -151,9 +151,8 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     let lowValue = UInt32(lowSurrogateBitPattern - 0xDC00)
                     let unicodeValue = highValue + lowValue + 0x10000
                     guard let unicode = Unicode.Scalar(unicodeValue) else {
-                        throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
-                            in: string, location, unicodeScalarValue: unicodeValue
-                        )
+                        // The structure of surrogate pairs forces the value in range. If it is out of range, there is bug in this function.
+                        preconditionFailure("Could not create unicode scalar from surrogate pair: \(highSurrogateBitPattern):\(lowSurrogateBitPattern). This is impossible.")
                     }
                     return unicode
                 }

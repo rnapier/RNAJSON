@@ -423,6 +423,32 @@ final class JSONTokenizerTests: XCTestCase {
                             throws: .numberWithLeadingZero(Location(line: 1, column: 40, index: 40)))
     }
 
+    func testDoubleLeadingZeros() async throws {
+        let json = Data("""
+        {"Numbers cannot have leading zeroes": 0013}
+        """.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, .key("Numbers cannot have leading zeroes")]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .numberWithLeadingZero(Location(line: 1, column: 40, index: 40)))
+    }
+
+    func testMinusLeadingZero() async throws {
+        let json = Data("""
+        {"Numbers cannot have leading zeroes": -013}
+        """.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, .key("Numbers cannot have leading zeroes")]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .numberWithLeadingZero(Location(line: 1, column: 41, index: 41)))
+    }
+
     // fail14
     func testNumbersCannotBeHex() async throws {
         let json = Data("""
@@ -737,9 +763,129 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: "", Location(line: 1, column:7, index: 7)))
+                            throws: .expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: "", Location(line: 1, column: 7, index: 7)))
     }
+
+    func testInvalidLowSurrogatePair() async throws {
+        let json = Data(#"""
+        "\uD834\uD834"
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: "", Location(line: 1, column: 12, index: 12)))
+    }
+
+    func testOutOfRangeUnicode() async throws {
+        let json = Data(#"""
+        "\uDD1E\uD834"
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .couldNotCreateUnicodeScalarFromUInt32(in: "", Location(line: 1, column: 6, index: 6), unicodeScalarValue: 56606))
+    }
+
+    func testTruncatedUnicode() async throws {
+        let json = Data(#"""
+        "\u12
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEndOfFile(Location(line: 1, column: 5, index: 5)))
+    }
+
+    func testInvalidHex() async throws {
+        let json = Data(#"""
+        "\u012x"
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .invalidHexDigitSequence("012x", Location(line: 1, column: 6, index: 6)))
+    }
+
+    func testDecimalAfterMinus() async throws {
+        let json = Data(#"""
+        -.1
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "."), Location(line: 1, column: 1, index: 1)))
+    }
+
+    func testEAfterMinus() async throws {
+        let json = Data(#"""
+        -e1
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "e"), Location(line: 1, column: 1, index: 1)))
+    }
+
+    func testSpaceAfterMinus() async throws {
+        let json = Data(#"""
+        - 1
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: " "), Location(line: 1, column: 1, index: 1)))
+    }
+
+    func testEndOfFileAfterMinus() async throws {
+        let json = Data(#"""
+        -
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEndOfFile(Location(line: 1, column: 1, index: 1)))
+    }
+
+    func testTruncatedLiteral() async throws {
+        let json = Data(#"""
+        tru
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEndOfFile(Location(line: 1, column: 3, index: 3)))
+    }
+
 }
+
+
 
 private extension XCTest {
     func XCTAssertThrowsError<T: Sendable>(
