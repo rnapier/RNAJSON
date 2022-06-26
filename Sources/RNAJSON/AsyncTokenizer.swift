@@ -30,15 +30,12 @@ public enum JSONError: Swift.Error, Hashable {
 }
 
 internal let whitespaceBytes: [UInt8] = [0x09, 0x0a, 0x0d, 0x20]
-private let hexDigits = Array(UInt8(ascii: "0")...UInt8(ascii: "9")) +
-Array(UInt8(ascii: "a")...UInt8(ascii: "f")) +
-Array(UInt8(ascii: "A")...UInt8(ascii: "F"))
 
 private typealias Location = JSONError.Location
 
 let terminators = whitespaceBytes + [.comma, .closeObject, .closeArray]
 
-struct Awaiting: OptionSet {
+private struct Awaiting: OptionSet {
     let rawValue: Int
     static let start = Awaiting(rawValue: 1 << 0)
     static let objectKey = Awaiting(rawValue: 1 << 1)
@@ -101,7 +98,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             self.strict = strict
         }
 
-        var awaiting: Awaiting = .start
+        private var awaiting: Awaiting = .start
 
         enum Container { case object, array }
         var containers: [Container] = []
@@ -210,8 +207,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     let lowSurrogateBitPattern = try await parseUnicodeHexSequence()
                     let isSecondByteLowSurrogate = lowSurrogateBitPattern & 0xFC00 // nil everything except first six bits
                     guard isSecondByteLowSurrogate == 0xDC00 else {
-                        // we are in an escaped sequence. for this reason an output string must have
-                        // been initialized
                         throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: string, location)
                     }
 
