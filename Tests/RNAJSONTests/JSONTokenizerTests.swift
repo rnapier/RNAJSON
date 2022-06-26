@@ -701,6 +701,20 @@ final class JSONTokenizerTests: XCTestCase {
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "}"), Location(line: 1, column: 11, index: 11)))
     }
+
+    func testTrailingEscape() async throws {
+        let json = Data(#"""
+        ["trailing escape \
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEndOfFile(Location(line: 1, column:19, index: 19)))
+
+    }
 }
 
 private extension XCTest {

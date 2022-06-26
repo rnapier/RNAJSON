@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Rob Napier on 6/20/22.
-//
-
 import Foundation
 
 @dynamicMemberLookup
