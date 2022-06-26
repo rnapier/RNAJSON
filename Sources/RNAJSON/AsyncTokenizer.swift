@@ -70,12 +70,6 @@ extension Awaiting: CustomStringConvertible {
     }
 }
 
-enum EscapedSequenceError: Swift.Error {
-    case expectedLowSurrogateUTF8SequenceAfterHighSurrogate(index: Int)
-    case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
-    case couldNotCreateUnicodeScalarFromUInt32(index: Int, unicodeScalarValue: UInt32)
-}
-
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
     public typealias Element = JSONToken
 
@@ -171,19 +165,19 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                             output = makeStringFast(copy)
                         }
 
-                        do {
-                            let escaped = try await parseEscapeSequence()
+//                        do {
+                            let escaped = try await parseEscapeSequence(in: output!)
                             output! += escaped
                             copy = []
-                        } catch EscapedSequenceError.unexpectedEscapedCharacter(let ascii, let failureIndex) {
-                            throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: output!, location)
-                        } catch EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(let failureIndex) {
-                            throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: output!, location)
-                        } catch EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(let failureIndex, let unicodeScalarValue) {
-                            throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
-                                in: output!, location, unicodeScalarValue: unicodeScalarValue
-                            )
-                        }
+//                        } catch EscapedSequenceError.unexpectedEscapedCharacter(let ascii, let failureIndex) {
+//                            throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: output!, location)
+//                        } catch EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(let failureIndex) {
+//                            throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: output!, location)
+//                        } catch EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(let failureIndex, let unicodeScalarValue) {
+//                            throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
+//                                in: output!, location, unicodeScalarValue: unicodeScalarValue
+//                            )
+//                        }
 
                     default:
                         copy.append(byte)
@@ -205,7 +199,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 }
             }
 
-            func parseEscapeSequence() async throws -> String {
+            func parseEscapeSequence(in string: String) async throws -> String {
                 guard let ascii = try await nextByte() else {
                     throw JSONError.unexpectedEndOfFile(location)
                 }
@@ -220,14 +214,14 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 case 0x72: return "\u{0D}" // \r
                 case 0x74: return "\u{09}" // \t
                 case 0x75:
-                    let character = try await parseUnicodeSequence()
+                    let character = try await parseUnicodeSequence(in: string)
                     return String(character)
                 default:
-                    throw EscapedSequenceError.unexpectedEscapedCharacter(ascii: ascii, index: index - 1)
+                    throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: string, location)
                 }
             }
 
-            func parseUnicodeSequence() async throws -> Unicode.Scalar {
+            func parseUnicodeSequence(in string: String) async throws -> Unicode.Scalar {
                 // we build this for utf8 only for now.
                 let bitPattern = try await parseUnicodeHexSequence()
 
@@ -243,7 +237,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     }
 
                     guard escapeChar == UInt8(ascii: #"\"#), uChar == UInt8(ascii: "u") else {
-                        throw EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(index: index - 1)
+                                              throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: string, location)
                     }
 
                     let lowSurrogateBitPattern = try await parseUnicodeHexSequence()
@@ -251,23 +245,23 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     guard isSecondByteLowSurrogate == 0xDC00 else {
                         // we are in an escaped sequence. for this reason an output string must have
                         // been initialized
-                        throw EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(index: index - 1)
+                        throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: string, location)
                     }
 
                     let highValue = UInt32(highSurrogateBitPattern - 0xD800) * 0x400
                     let lowValue = UInt32(lowSurrogateBitPattern - 0xDC00)
                     let unicodeValue = highValue + lowValue + 0x10000
                     guard let unicode = Unicode.Scalar(unicodeValue) else {
-                        throw EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(
-                            index: index, unicodeScalarValue: unicodeValue
+                        throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
+                            in: string, location, unicodeScalarValue: unicodeValue
                         )
                     }
                     return unicode
                 }
 
                 guard let unicode = Unicode.Scalar(bitPattern) else {
-                    throw EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(
-                        index: index, unicodeScalarValue: UInt32(bitPattern)
+                    throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
+                        in: string, location, unicodeScalarValue: UInt32(bitPattern)
                     )
                 }
                 return unicode
