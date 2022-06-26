@@ -12,8 +12,10 @@ public enum JSONError: Swift.Error, Hashable {
     case unexpectedCharacter(ascii: UInt8, Location)
     case unexpectedEndOfFile(Location)
     case numberWithLeadingZero(Location)
-    case unexpectedEscapedCharacter(ascii: UInt8, Location)
-    case unescapedControlCharacterInString(ascii: UInt8, Location)
+    case unexpectedEscapedCharacter(ascii: UInt8, in: String, Location)
+    case unescapedControlCharacterInString(ascii: UInt8, in: String, Location)
+    case expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: String, Location)
+    case couldNotCreateUnicodeScalarFromUInt32(in: String, Location, unicodeScalarValue: UInt32)
     case invalidHexDigitSequence(String, Location)
     case jsonFragmentDisallowed
     case missingKey(Location)
@@ -66,6 +68,12 @@ extension Awaiting: CustomStringConvertible {
 
         return "[\(values.joined(separator: ", "))]"
     }
+}
+
+enum EscapedSequenceError: Swift.Error {
+    case expectedLowSurrogateUTF8SequenceAfterHighSurrogate(index: Int)
+    case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
+    case couldNotCreateUnicodeScalarFromUInt32(index: Int, unicodeScalarValue: UInt32)
 }
 
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
@@ -132,53 +140,188 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 return result
             }
 
-            func consumeOpenString() async throws -> [UInt8] {
-                var output: [UInt8] = []
+            func consumeOpenString() async throws -> String {
+                var stringStartIndex = index
+                var copy: [UInt8] = []
+                var output: String?
 
                 while let byte = try await nextByte() {
                     switch byte {
                     case UInt8(ascii: "\""):
-                        return output
+                        guard var result = output else {
+                            // if we don't have an output string we create a new string
+                            return String(decoding: copy, as: Unicode.UTF8.self)
+                        }
+                        // if we have an output string we append
+                        result += String(decoding: copy, as: Unicode.UTF8.self)
+                        return result
 
                     case 0 ... 31:
-                        throw JSONError.unescapedControlCharacterInString(ascii: byte, location)
+                        // All Unicode characters may be placed within the
+                        // quotation marks, except for the characters that must be escaped:
+                        // quotation mark, reverse solidus, and the control characters (U+0000
+                        // through U+001F).
+                        var string = output ?? ""
+                        string += makeStringFast(copy)
+                        throw JSONError.unescapedControlCharacterInString(ascii: byte, in: string, location)
 
                     case UInt8(ascii: "\\"):
-                        output.append(byte)
-
-                        guard let escaped = try await nextByte() else {
-                            throw JSONError.unexpectedEndOfFile(location)
+                        if output != nil {
+                            output! += makeStringFast(copy)
+                        } else {
+                            output = makeStringFast(copy)
                         }
-                        switch escaped {
-                        case .quote, .backslash, UInt8(ascii: "/"), UInt8(ascii: "b"), UInt8(ascii: "f"), UInt8(ascii: "n"), UInt8(ascii: "r"), UInt8(ascii: "t"):
-                            output.append(escaped)
-                        case UInt8(ascii: "u"):
-                            output.append(escaped)
-                            guard let digit1 = try await nextByte(),
-                                  let digit2 = try await nextByte(),
-                                  let digit3 = try await nextByte(),
-                                  let digit4 = try await nextByte() else {
-                                      throw JSONError.unexpectedEndOfFile(location)
-                                  }
 
-                            let digits = [digit1, digit2, digit3, digit4]
-                            guard digits.allSatisfy(hexDigits.contains) else {
-                                let hexString = String(decoding: digits, as: Unicode.UTF8.self)
-                                throw JSONError.invalidHexDigitSequence(hexString, location)
-                            }
+                        let escapedStartIndex = index
 
-                            output += digits
-
-                        default:
-                            throw JSONError.unexpectedEscapedCharacter(ascii: escaped, location)
+                        do {
+                            let escaped = try await parseEscapeSequence()
+                            output! += escaped
+                            stringStartIndex = index
+                            copy = []
+                        } catch EscapedSequenceError.unexpectedEscapedCharacter(let ascii, let failureIndex) {
+//                            output! += makeStringFast(copy)
+                            throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: output!, location)
+                        } catch EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(let failureIndex) {
+//                            output! += makeStringFast(copy)
+                            throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: output!, location)
+                        } catch EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(let failureIndex, let unicodeScalarValue) {
+//                            output! += makeStringFast(copy)
+                            throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
+                                in: output!, location, unicodeScalarValue: unicodeScalarValue
+                            )
                         }
+
                     default:
-                        output.append(byte)
+                        copy.append(byte)
                         continue
                     }
                 }
 
                 throw JSONError.unexpectedEndOfFile(location)
+            }
+
+            // can be removed as soon https://bugs.swift.org/browse/SR-12126 and
+            // https://bugs.swift.org/browse/SR-12125 has landed.
+            // Thanks @weissi for making my code fast!
+            func makeStringFast<Bytes: Collection>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
+                if let string = bytes.withContiguousStorageIfAvailable({ String(decoding: $0, as: Unicode.UTF8.self) }) {
+                    return string
+                } else {
+                    return String(decoding: bytes, as: Unicode.UTF8.self)
+                }
+            }
+
+            func parseEscapeSequence() async throws -> String {
+//                precondition(self.read() == .backslash, "Expected to have an backslash first")
+                guard let ascii = try await nextByte() else {
+                    throw JSONError.unexpectedEndOfFile(location)
+                }
+
+                switch ascii {
+                case 0x22: return "\""
+                case 0x5C: return "\\"
+                case 0x2F: return "/"
+                case 0x62: return "\u{08}" // \b
+                case 0x66: return "\u{0C}" // \f
+                case 0x6E: return "\u{0A}" // \n
+                case 0x72: return "\u{0D}" // \r
+                case 0x74: return "\u{09}" // \t
+                case 0x75:
+                    let character = try await parseUnicodeSequence()
+                    return String(character)
+                default:
+                    throw EscapedSequenceError.unexpectedEscapedCharacter(ascii: ascii, index: index - 1)
+                }
+            }
+
+            func parseUnicodeSequence() async throws -> Unicode.Scalar {
+                // we build this for utf8 only for now.
+                let bitPattern = try await parseUnicodeHexSequence()
+
+                // check if high surrogate
+                let isFirstByteHighSurrogate = bitPattern & 0xFC00 // nil everything except first six bits
+                if isFirstByteHighSurrogate == 0xD800 {
+                    // if we have a high surrogate we expect a low surrogate next
+                    let highSurrogateBitPattern = bitPattern
+                    guard let (escapeChar) = try await nextByte(),
+                          let (uChar) = try await nextByte()
+                    else {
+                        throw JSONError.unexpectedEndOfFile(location)
+                    }
+
+                    guard escapeChar == UInt8(ascii: #"\"#), uChar == UInt8(ascii: "u") else {
+                        throw EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(index: index - 1)
+                    }
+
+                    let lowSurrogateBitPattern = try await parseUnicodeHexSequence()
+                    let isSecondByteLowSurrogate = lowSurrogateBitPattern & 0xFC00 // nil everything except first six bits
+                    guard isSecondByteLowSurrogate == 0xDC00 else {
+                        // we are in an escaped sequence. for this reason an output string must have
+                        // been initialized
+                        throw EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(index: index - 1)
+                    }
+
+                    let highValue = UInt32(highSurrogateBitPattern - 0xD800) * 0x400
+                    let lowValue = UInt32(lowSurrogateBitPattern - 0xDC00)
+                    let unicodeValue = highValue + lowValue + 0x10000
+                    guard let unicode = Unicode.Scalar(unicodeValue) else {
+                        throw EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(
+                            index: index, unicodeScalarValue: unicodeValue
+                        )
+                    }
+                    return unicode
+                }
+
+                guard let unicode = Unicode.Scalar(bitPattern) else {
+                    throw EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(
+                        index: index, unicodeScalarValue: UInt32(bitPattern)
+                    )
+                }
+                return unicode
+            }
+
+            func parseUnicodeHexSequence() async throws -> UInt16 {
+                // As stated in RFC-8259 an escaped unicode character is 4 HEXDIGITs long
+                // https://tools.ietf.org/html/rfc8259#section-7
+                let startIndex = index
+                guard let firstHex = try await nextByte(),
+                      let secondHex = try await nextByte(),
+                      let thirdHex = try await nextByte(),
+                      let forthHex = try await nextByte()
+                else {
+                    throw JSONError.unexpectedEndOfFile(location)
+                }
+
+                guard let first = hexAsciiTo4Bits(firstHex),
+                      let second = hexAsciiTo4Bits(secondHex),
+                      let third = hexAsciiTo4Bits(thirdHex),
+                      let forth = hexAsciiTo4Bits(forthHex)
+                else {
+                    let hexString = String(decoding: [firstHex, secondHex, thirdHex, forthHex], as: Unicode.UTF8.self)
+                    throw JSONError.invalidHexDigitSequence(hexString, location)
+                }
+                let firstByte = UInt16(first) << 4 | UInt16(second)
+                let secondByte = UInt16(third) << 4 | UInt16(forth)
+
+                let bitPattern = UInt16(firstByte) << 8 | UInt16(secondByte)
+
+                return bitPattern
+            }
+
+            func hexAsciiTo4Bits(_ ascii: UInt8) -> UInt8? {
+                switch ascii {
+                case 48 ... 57:
+                    return ascii - 48
+                case 65 ... 70:
+                    // uppercase letters
+                    return ascii - 55
+                case 97 ... 102:
+                    // lowercase letters
+                    return ascii - 87
+                default:
+                    return nil
+                }
             }
 
             func consumeDigits(first: UInt8) async throws -> JSONToken {

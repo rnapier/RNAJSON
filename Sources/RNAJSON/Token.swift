@@ -9,12 +9,12 @@ public enum JSONToken: Hashable {
     case arrayOpen
     case arrayClose
     case objectOpen
-    case objectKey([UInt8])
+    case objectKey(String)
     case objectClose
     case `true`
     case `false`
     case null
-    case string([UInt8])
+    case string(String)
     case number(String)
 }
 
@@ -24,13 +24,13 @@ extension JSONToken {
     }
 
     public static func key(_ key: String) -> Self {
-        .objectKey(Array(key.utf8))
+        .objectKey(key)
     }
 }
 
 extension JSONToken: ExpressibleByStringLiteral {
     public init(stringLiteral value: StringLiteralType) {
-        self = .string(Array(value.utf8))
+        self = .string(value)
     }
 }
 
@@ -115,12 +115,12 @@ extension JSONToken: CustomStringConvertible {
         case .arrayOpen: return ".arrayOpen"
         case .arrayClose: return ".arrayClose"
         case .objectOpen: return ".objectOpen"
-        case .objectKey(let data): return ".key(\(describeString(data)))"
+        case .objectKey(let string): return ".key(\(string.debugDescription))"
         case .objectClose: return ".objectClose"
         case .true: return "true"
         case .false: return "false"
         case .null: return ".null"
-        case .string(let data): return describeString(data)
+        case .string(let string): return string.debugDescription
 
         case .number(let digits):
             return digits.digitsDescription

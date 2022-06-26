@@ -51,7 +51,7 @@ final class JSONTokenizerTests: XCTestCase {
         "\""
         """#.utf8).async
         let result = try await Array(json.jsonTokens)
-        XCTAssertEqual(result, [#"\""#])
+        XCTAssertEqual(result, ["\""])
     }
 
     func testCompactArray() async throws {
@@ -77,11 +77,121 @@ final class JSONTokenizerTests: XCTestCase {
 
     // pass1
     func testComplexJSON() async throws {
-        let url = Bundle.module.url(forResource: "json.org/pass1.json", withExtension: nil)!
-        let json = try Data(contentsOf: url).async
+        let json = Data(#"""
+        [
+            "JSON Test Pattern pass1",
+            {"object with 1 member":["array with 1 element"]},
+            {},
+            [],
+            -42,
+            true,
+            false,
+            null,
+            {
+                "integer": 1234567890,
+                "real": -9876.543210,
+                "e": 0.123456789e-12,
+                "E": 1.234567890E+34,
+                "":  23456789012E66,
+                "zero": 0,
+                "one": 1,
+                "space": " ",
+                "quote": "\"",
+                "backslash": "\\",
+                "controls": "\b\f\n\r\t",
+                "slash": "/ & \/",
+                "alpha": "abcdefghijklmnopqrstuvwyz",
+                "ALPHA": "ABCDEFGHIJKLMNOPQRSTUVWYZ",
+                "digit": "0123456789",
+                "0123456789": "digit",
+                "special": "`1~!@#$%^&*()_+-={':[,]}|;.</>?",
+                "hex": "\u0123\u4567\u89AB\uCDEF\uabcd\uef4A",
+                "true": true,
+                "false": false,
+                "null": null,
+                "array":[  ],
+                "object":{  },
+                "address": "50 St. James Street",
+                "url": "http://www.JSON.org/",
+                "comment": "// /* <!-- --",
+                "# -- --> */": " ",
+                " s p a c e d " :[1,2 , 3
+
+        ,
+
+        4 , 5        ,          6           ,7        ],"compact":[1,2,3,4,5,6,7],
+                "jsontext": "{\"object with 1 member\":[\"array with 1 element\"]}",
+                "quotes": "&#34; \u0022 %22 0x22 034 &#x22;",
+                "\/\\\"\uCAFE\uBABE\uAB98\uFCDE\ubcda\uef4A\b\f\n\r\t`1~!@#$%^&*()_+-=[]{}|;:',./<>?"
+        : "A key can be any string"
+            },
+            0.5 ,98.6
+        ,
+        99.44
+        ,
+
+        1066,
+        1e1,
+        0.1e1,
+        1e-1,
+        1e00,2e+00,2e-00
+        ,"rosebud"]
+        """#.utf8).async
 
         let expected: [JSONToken] =
-        [.arrayOpen, "JSON Test Pattern pass1", .objectOpen, .key("object with 1 member"), .arrayOpen, "array with 1 element", .arrayClose, .objectClose, .objectOpen, .objectClose, .arrayOpen, .arrayClose, -42, true, false, .null, .objectOpen, .key("integer"), 1234567890, .key("real"), .digits("-9876.543210"), .key("e"), .digits("0.123456789e-12"), .key("E"), .digits("1.234567890E+34"), .key(""), .digits("23456789012E66"), .key("zero"), 0, .key("one"), 1, .key("space"), " ", .key("quote"), #"\""#, .key("backslash"), #"\\"#, .key("controls"), #"\b\f\n\r\t"#, .key("slash"), #"/ & \/"#, .key("alpha"), "abcdefghijklmnopqrstuvwyz", .key("ALPHA"), "ABCDEFGHIJKLMNOPQRSTUVWYZ", .key("digit"), "0123456789", .key("0123456789"), "digit", .key("special"), "`1~!@#$%^&*()_+-={':[,]}|;.</>?", .key("hex"), #"\u0123\u4567\u89AB\uCDEF\uabcd\uef4A"#, .key("true"), true, .key("false"), false, .key("null"), .null, .key("array"), .arrayOpen, .arrayClose, .key("object"), .objectOpen, .objectClose, .key("address"), "50 St. James Street", .key("url"), "http://www.JSON.org/", .key("comment"), "// /* <!-- --", .key("# -- --> */"), " ", .key(" s p a c e d "), .arrayOpen, 1, 2, 3, 4, 5, 6, 7, .arrayClose, .key("compact"), .arrayOpen, 1, 2, 3, 4, 5, 6, 7, .arrayClose, .key("jsontext"), #"{\"object with 1 member\":[\"array with 1 element\"]}"#, .key("quotes"), #"&#34; \u0022 %22 0x22 034 &#x22;"#, .key(#"\/\\\"\uCAFE\uBABE\uAB98\uFCDE\ubcda\uef4A\b\f\n\r\t`1~!@#$%^&*()_+-=[]{}|;:',./<>?"#), "A key can be any string", .objectClose, 0.5, 98.6, 99.44, 1066, .digits("1e1"), .digits("0.1e1"), .digits("1e-1"), .digits("1e00"), .digits("2e+00"), .digits("2e-00"), "rosebud", .arrayClose]
+        [.arrayOpen,
+         "JSON Test Pattern pass1",
+         .objectOpen, .key("object with 1 member"), .arrayOpen, "array with 1 element", .arrayClose, .objectClose,
+         .objectOpen, .objectClose,
+         .arrayOpen, .arrayClose,
+         -42,
+         true,
+         false,
+         .null,
+         .objectOpen,
+         .key("integer"), 1234567890,
+         .key("real"), .digits("-9876.543210"),
+         .key("e"), .digits("0.123456789e-12"),
+         .key("E"), .digits("1.234567890E+34"),
+         .key(""), .digits("23456789012E66"),
+         .key("zero"), 0,
+         .key("one"), 1,
+         .key("space"), " ",
+         .key("quote"), "\"",
+         .key("backslash"), "\\",
+         .key("controls"), "\u{08}\u{0C}\n\r\t",
+         .key("slash"), "/ & /",
+         .key("alpha"), "abcdefghijklmnopqrstuvwyz",
+         .key("ALPHA"), "ABCDEFGHIJKLMNOPQRSTUVWYZ",
+         .key("digit"), "0123456789",
+         .key("0123456789"), "digit",
+         .key("special"), "`1~!@#$%^&*()_+-={\':[,]}|;.</>?",
+         .key("hex"), "ģ䕧覫췯ꯍ",
+         .key("true"), true,
+         .key("false"), false,
+         .key("null"), .null,
+         .key("array"), .arrayOpen, .arrayClose,
+         .key("object"), .objectOpen, .objectClose,
+         .key("address"), "50 St. James Street",
+         .key("url"), "http://www.JSON.org/",
+         .key("comment"), "// /* <!-- --",
+         .key("# -- --> */"), " ",
+         .key(" s p a c e d "), .arrayOpen, 1, 2, 3, 4, 5, 6, 7, .arrayClose,
+         .key("compact"), .arrayOpen, 1, 2, 3, 4, 5, 6, 7, .arrayClose,
+         .key("jsontext"), "{\"object with 1 member\":[\"array with 1 element\"]}",
+         .key("quotes"), "&#34; \" %22 0x22 034 &#x22;",
+         .key("/\\\"쫾몾ꮘﳞ볚\u{08}\u{0C}\n\r\t`1~!@#$%^&*()_+-=[]{}|;:\',./<>?"), "A key can be any string",
+         .objectClose,
+         0.5, 98.6,
+         99.44,
+         1066,
+         .digits("1e1"),
+         .digits("0.1e1"),
+         .digits("1e-1"),
+         .digits("1e00"),
+         .digits("2e+00"),
+         .digits("2e-00"),
+         "rosebud", .arrayClose]
 
         try await XCTAssertDeepEqual(json.jsonTokens, expected)
     }
@@ -339,7 +449,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "x"),
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "x"), in: "Illegal backslash escape: ",
                                                                 Location(line: 1, column: 29, index: 29)))
     }
 
@@ -369,7 +479,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "0"),
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "0"), in: "Illegal backslash escape: ",
                                                                 Location(line: 1, column: 29, index: 29)))
     }
 
@@ -471,7 +581,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\t"),
+                            throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\t"), in: "",
                                                                        Location(line: 1, column: 2, index: 2)))
     }
 
@@ -486,7 +596,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: " "),
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: " "), in: "tab",
                                                                 Location(line: 1, column: 6, index: 6)))
     }
 
@@ -502,7 +612,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\n"),
+                            throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\n"), in: "line",
                                                                        Location(line: 2, column: 0, index: 6)))
     }
 
@@ -518,7 +628,7 @@ final class JSONTokenizerTests: XCTestCase {
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "\n"),
+                            throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "\n"), in: "line",
                                                                 Location(line: 2, column: 0, index: 7)))
     }
 
