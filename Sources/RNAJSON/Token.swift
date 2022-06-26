@@ -15,12 +15,12 @@ public enum JSONToken: Hashable {
     case `false`
     case null
     case string([UInt8])
-    case number([UInt8])
+    case number(String)
 }
 
 extension JSONToken {
     public static func digits(_ digits: String) -> Self {
-        .number(Array(digits.utf8))
+        .number(digits)
     }
 
     public static func key(_ key: String) -> Self {
@@ -36,13 +36,13 @@ extension JSONToken: ExpressibleByStringLiteral {
 
 extension JSONToken: ExpressibleByIntegerLiteral {
     public init(integerLiteral value: IntegerLiteralType) {
-        self = .number(Array("\(value)".utf8))
+        self = .number("\(value)")
     }
 }
 
 extension JSONToken: ExpressibleByFloatLiteral {
     public init(floatLiteral value: FloatLiteralType) {
-        self = .number(Array("\(value)".utf8))
+        self = .number("\(value)")
     }
 }
 
@@ -71,12 +71,43 @@ extension JSONToken: CustomStringConvertible {
                         "\(string)"
                         """
             }
-        } else {
-            let bytes = data.map { "\($0)" }.joined(separator: ", ")
-            return """
-                    .string(Data([\(bytes)]))
-                    """
         }
+        return string
+    }
+    private func encodeCharacter(_ c: Character) -> String {
+        switch c {
+        case "\u{0}" ..< " ":
+            switch c {
+            case #"""#: return #"\""#
+            case #"\"#: return #"\\"#
+            case "\u{8}": return #"\b"#
+            case "\u{c}": return #"\f"#
+            case "\n": return #"\n"#
+            case "\r": return #"\r"#
+            case "\t": return #"\t"#
+            default:
+                func valueToAscii(_ value: UInt8) -> UInt8 {
+                    switch value {
+                    case 0 ... 9:
+                        return value + UInt8(ascii: "0")
+                    case 10 ... 15:
+                        return value - 10 + UInt8(ascii: "a")
+                    default:
+                        preconditionFailure()
+                    }
+                }
+                let value = c.asciiValue!
+                let firstNibble = valueToAscii(value / 16)
+                let secondNibble = valueToAscii(value % 16)
+                return "\\u00\(firstNibble)\(secondNibble)"
+            }
+        default:
+            return String(c)
+        }
+    }
+
+    private func encodeString(_ string: String) -> String {
+        "\"\(string.lazy.map(encodeCharacter).joined())\""
     }
 
     public var description: String {
@@ -91,9 +122,8 @@ extension JSONToken: CustomStringConvertible {
         case .null: return ".null"
         case .string(let data): return describeString(data)
 
-        case .number(let data):
-            let digits = String(decoding: data, as: Unicode.UTF8.self)
-            return digits.digitsDescription            
+        case .number(let digits):
+            return digits.digitsDescription
         }
     }
 }

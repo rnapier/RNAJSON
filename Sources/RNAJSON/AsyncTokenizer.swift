@@ -267,7 +267,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                             }
                         }
                         peek = byte
-                        return .number(digits)
+                        return .number(String(decoding: digits, as: Unicode.UTF8.self))
 
                     default:
                         throw JSONError.unexpectedCharacter(ascii: byte, location)
@@ -278,7 +278,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                     throw JSONError.unexpectedEndOfFile(location)
                 }
 
-                return .number(digits)
+                return .number(String(decoding: digits, as: Unicode.UTF8.self))
             }
 
             func consumeScalarValue(first: UInt8) async throws -> JSONToken {
