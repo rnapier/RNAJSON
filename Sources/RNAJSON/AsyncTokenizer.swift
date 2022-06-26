@@ -136,48 +136,26 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
             func consumeOpenString() async throws -> String {
                 var copy: [UInt8] = []
-                var output: String?
+                var output: String = ""
 
                 while let byte = try await nextByte() {
                     switch byte {
                     case UInt8(ascii: "\""):
-                        guard var result = output else {
-                            // if we don't have an output string we create a new string
-                            return String(decoding: copy, as: Unicode.UTF8.self)
-                        }
-                        // if we have an output string we append
-                        result += String(decoding: copy, as: Unicode.UTF8.self)
-                        return result
+                        output += String(decoding: copy, as: Unicode.UTF8.self)
+                        return output
 
                     case 0 ... 31:
                         // All Unicode characters may be placed within the
                         // quotation marks, except for the characters that must be escaped:
                         // quotation mark, reverse solidus, and the control characters (U+0000
                         // through U+001F).
-                        var string = output ?? ""
-                        string += makeStringFast(copy)
-                        throw JSONError.unescapedControlCharacterInString(ascii: byte, in: string, location)
+                        output += String(decoding: copy, as: Unicode.UTF8.self)
+                        throw JSONError.unescapedControlCharacterInString(ascii: byte, in: output, location)
 
                     case UInt8(ascii: "\\"):
-                        if output != nil {
-                            output! += makeStringFast(copy)
-                        } else {
-                            output = makeStringFast(copy)
-                        }
-
-//                        do {
-                            let escaped = try await parseEscapeSequence(in: output!)
-                            output! += escaped
-                            copy = []
-//                        } catch EscapedSequenceError.unexpectedEscapedCharacter(let ascii, let failureIndex) {
-//                            throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: output!, location)
-//                        } catch EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(let failureIndex) {
-//                            throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: output!, location)
-//                        } catch EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(let failureIndex, let unicodeScalarValue) {
-//                            throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
-//                                in: output!, location, unicodeScalarValue: unicodeScalarValue
-//                            )
-//                        }
+                        output += String(decoding: copy, as: Unicode.UTF8.self)
+                        output += try await parseEscapeSequence(in: output)
+                        copy = []
 
                     default:
                         copy.append(byte)
@@ -186,17 +164,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 }
 
                 throw JSONError.unexpectedEndOfFile(location)
-            }
-
-            // can be removed as soon https://bugs.swift.org/browse/SR-12126 and
-            // https://bugs.swift.org/browse/SR-12125 has landed.
-            // Thanks @weissi for making my code fast!
-            func makeStringFast<Bytes: Collection>(_ bytes: Bytes) -> String where Bytes.Element == UInt8 {
-                if let string = bytes.withContiguousStorageIfAvailable({ String(decoding: $0, as: Unicode.UTF8.self) }) {
-                    return string
-                } else {
-                    return String(decoding: bytes, as: Unicode.UTF8.self)
-                }
             }
 
             func parseEscapeSequence(in string: String) async throws -> String {
@@ -236,8 +203,8 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         throw JSONError.unexpectedEndOfFile(location)
                     }
 
-                    guard escapeChar == UInt8(ascii: #"\"#), uChar == UInt8(ascii: "u") else {
-                                              throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: string, location)
+                    guard escapeChar == .backslash, uChar == UInt8(ascii: "u") else {
+                        throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: string, location)
                     }
 
                     let lowSurrogateBitPattern = try await parseUnicodeHexSequence()
