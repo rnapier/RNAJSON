@@ -121,15 +121,13 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 case 0x72: return "\u{0D}" // \r
                 case 0x74: return "\u{09}" // \t
                 case 0x75:
-                    let character = try await parseUnicodeSequence(in: string)
-                    return String(character)
+                    return String(try await parseUnicodeSequence(in: string))
                 default:
                     throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: string, location)
                 }
             }
 
             func parseUnicodeSequence(in string: String) async throws -> Unicode.Scalar {
-                // we build this for utf8 only for now.
                 let bitPattern = try await parseUnicodeHexSequence()
 
                 // check if high surrogate
@@ -137,13 +135,9 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 if isFirstByteHighSurrogate == 0xD800 {
                     // if we have a high surrogate we expect a low surrogate next
                     let highSurrogateBitPattern = bitPattern
-                    guard let (escapeChar) = try await nextByte(),
-                          let (uChar) = try await nextByte()
+                    guard let escapeChar = try await nextByte(), escapeChar == .backslash,
+                          let uChar = try await nextByte(), uChar == UInt8(ascii: "u")
                     else {
-                        throw JSONError.unexpectedEndOfFile(location)
-                    }
-
-                    guard escapeChar == .backslash, uChar == UInt8(ascii: "u") else {
                         throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: string, location)
                     }
 

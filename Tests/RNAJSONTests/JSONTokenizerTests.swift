@@ -715,6 +715,30 @@ final class JSONTokenizerTests: XCTestCase {
                             throws: .unexpectedEndOfFile(Location(line: 1, column:19, index: 19)))
 
     }
+
+    func testSurrogatePairs() async throws {
+        let json = Data(#"""
+        "\uD834\uDD1E"
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.string("\u{1D11E}")]
+
+        try await XCTAssertDeepEqual(json.jsonTokens, expected)
+    }
+
+    func testMissingLowSurrogatePair() async throws {
+        let json = Data(#"""
+        "\uD834"
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        []
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: "", Location(line: 1, column:7, index: 7)))
+    }
 }
 
 private extension XCTest {
