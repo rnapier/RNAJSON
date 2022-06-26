@@ -141,7 +141,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             }
 
             func consumeOpenString() async throws -> String {
-                var stringStartIndex = index
                 var copy: [UInt8] = []
                 var output: String?
 
@@ -172,21 +171,15 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                             output = makeStringFast(copy)
                         }
 
-                        let escapedStartIndex = index
-
                         do {
                             let escaped = try await parseEscapeSequence()
                             output! += escaped
-                            stringStartIndex = index
                             copy = []
                         } catch EscapedSequenceError.unexpectedEscapedCharacter(let ascii, let failureIndex) {
-//                            output! += makeStringFast(copy)
                             throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: output!, location)
                         } catch EscapedSequenceError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(let failureIndex) {
-//                            output! += makeStringFast(copy)
                             throw JSONError.expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: output!, location)
                         } catch EscapedSequenceError.couldNotCreateUnicodeScalarFromUInt32(let failureIndex, let unicodeScalarValue) {
-//                            output! += makeStringFast(copy)
                             throw JSONError.couldNotCreateUnicodeScalarFromUInt32(
                                 in: output!, location, unicodeScalarValue: unicodeScalarValue
                             )
@@ -213,7 +206,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             }
 
             func parseEscapeSequence() async throws -> String {
-//                precondition(self.read() == .backslash, "Expected to have an backslash first")
                 guard let ascii = try await nextByte() else {
                     throw JSONError.unexpectedEndOfFile(location)
                 }
@@ -284,7 +276,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
             func parseUnicodeHexSequence() async throws -> UInt16 {
                 // As stated in RFC-8259 an escaped unicode character is 4 HEXDIGITs long
                 // https://tools.ietf.org/html/rfc8259#section-7
-                let startIndex = index
                 guard let firstHex = try await nextByte(),
                       let secondHex = try await nextByte(),
                       let thirdHex = try await nextByte(),
