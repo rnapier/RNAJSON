@@ -549,6 +549,48 @@ final class JSONTokenizerTests: XCTestCase {
                             returns: expected,
                             throws: .missingExponent(Location(line: 1, column: 4, index: 4)))
     }
+
+    // fail31
+    func testTooManyExpSigns() async throws {
+        let json = Data(#"""
+        [0e+-1]
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "-"), Location(line: 1, column: 4, index: 4)))
+    }
+
+    // fail32
+    func testCommaInsteadOfClosingBrace() async throws {
+        let json = Data(#"""
+        {"Comma instead if closing brace": true,
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.objectOpen, .key("Comma instead if closing brace"), .true]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedEndOfFile(Location(line: 1, column: 40, index: 40)))
+    }
+
+    // fail33
+    func testsBraceMismatch() async throws {
+        let json = Data(#"""
+        ["mismatch"}
+        """#.utf8).async
+
+        let expected: [JSONToken] =
+        [.arrayOpen, "mismatch"]
+
+        try await XCTAssert(json.jsonTokens,
+                            returns: expected,
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "}"), Location(line: 1, column: 11, index: 11)))
+    }
 }
 extension XCTest {
     func XCTAssertThrowsError<T: Sendable>(
