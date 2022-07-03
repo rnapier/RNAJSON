@@ -13,25 +13,25 @@ public enum JSONValue {
     public init(_ convertible: JSONConvertible) throws { self = try convertible.jsonValue() }
 }
 
-extension JSONValue {
-    public var isValue: Bool {
-        switch self {
-        case .array, .object:
-            return false
-        case .null, .number, .string, .bool:
-            return true
-        }
-    }
-
-    public var isContainer: Bool {
-        switch self {
-        case .array, .object:
-            return true
-        case .null, .number, .string, .bool:
-            return false
-        }
-    }
-}
+//extension JSONValue {
+//    public var isValue: Bool {
+//        switch self {
+//        case .array, .object:
+//            return false
+//        case .null, .number, .string, .bool:
+//            return true
+//        }
+//    }
+//
+//    public var isContainer: Bool {
+//        switch self {
+//        case .array, .object:
+//            return true
+//        case .null, .number, .string, .bool:
+//            return false
+//        }
+//    }
+//}
 
 extension JSONValue {
     // Sorts all nested objects by key and removes duplicate keys (keeping last value).
@@ -249,6 +249,8 @@ extension JSONValue {
 }
 
 // Tuples (JSONKeyValues) can't directly conform to Equatable, so do this by hand
+// Note that this is strict equality. Key order and duplication must be identical for objects.
+// Use `.normalized()` to sort keys and remove duplicates for "equivalent" comparison.
 extension JSONValue: Equatable {
     public static func == (lhs: JSONValue, rhs: JSONValue) -> Bool {
         switch (lhs, rhs) {
