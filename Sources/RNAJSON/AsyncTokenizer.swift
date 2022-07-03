@@ -1,15 +1,3 @@
-internal let whitespaceBytes: [UInt8] = [0x09, 0x0a, 0x0d, 0x20]
-
-private typealias Location = JSONError.Location
-
-let terminators = whitespaceBytes + [.comma, .closeObject, .closeArray]
-
-enum Awaiting: Hashable {
-    case start, end
-    case objectKey, keyValueSeparator, objectValue, objectSeparator, objectClose
-    case arrayValue, arraySeparator, arrayClose
-}
-
 public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where Base.Element == UInt8 {
     public typealias Element = JSONToken
 
@@ -19,6 +7,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
     public struct AsyncIterator: AsyncIteratorProtocol {
         public typealias Element = JSONToken
+        private typealias Location = JSONError.Location
 
         var strict: Bool
         var byteSource: Base.AsyncIterator
@@ -39,6 +28,12 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         internal init(underlyingIterator: Base.AsyncIterator, strict: Bool) {
             byteSource = underlyingIterator
             self.strict = strict
+        }
+
+        enum Awaiting: Hashable {
+            case start, end
+            case objectKey, keyValueSeparator, objectValue, objectSeparator, objectClose
+            case arrayValue, arraySeparator, arrayClose
         }
 
         private var awaiting: Set<Awaiting> = [.start]
@@ -85,10 +80,9 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                         return output
 
                     case 0 ... 31:
-                        // All Unicode characters may be placed within the
-                        // quotation marks, except for the characters that must be escaped:
-                        // quotation mark, reverse solidus, and the control characters (U+0000
-                        // through U+001F).
+                        /// All code points may be placed within the quotation marks except for the code
+                        /// points that must be escaped: quotation mark (U+0022), reverse solidus (U+005C),
+                        /// and the control characters U+0000 to U+001F.
                         output += String(decoding: copy, as: Unicode.UTF8.self)
                         throw JSONError.unescapedControlCharacterInString(ascii: byte, in: output, location)
 
@@ -99,7 +93,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
                     default:
                         copy.append(byte)
-                        continue
                     }
                 }
 
@@ -358,14 +351,6 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
                 } catch JSONError.unexpectedCharacter {
                     throw JSONError.corruptedLiteral(expected: literal, location)
                 }
-
-                if let terminator = try await nextByte() {
-                    if terminators.contains(terminator) {
-                        peek = terminator
-                    } else {
-                        throw JSONError.corruptedLiteral(expected: literal, location)
-                    }
-                }
             }
 
             while let first = try await nextByte() {
@@ -458,31 +443,21 @@ public extension AsyncSequence where Self.Element == UInt8 {
     }
 }
 
-extension UInt8 {
+internal extension UInt8 {
+    static let space = UInt8(ascii: " ")
+    static let `return` = UInt8(ascii: "\r")
+    static let newline = UInt8(ascii: "\n")
+    static let tab = UInt8(ascii: "\t")
 
-    internal static let space = UInt8(ascii: " ")
-    internal static let `return` = UInt8(ascii: "\r")
-    internal static let newline = UInt8(ascii: "\n")
-    internal static let tab = UInt8(ascii: "\t")
+    static let colon = UInt8(ascii: ":")
+    static let comma = UInt8(ascii: ",")
 
-    internal static let colon = UInt8(ascii: ":")
-    internal static let comma = UInt8(ascii: ",")
+    static let openObject = UInt8(ascii: "{")
+    static let closeObject = UInt8(ascii: "}")
 
-    internal static let openObject = UInt8(ascii: "{")
-    internal static let closeObject = UInt8(ascii: "}")
+    static let openArray = UInt8(ascii: "[")
+    static let closeArray = UInt8(ascii: "]")
 
-    internal static let openArray = UInt8(ascii: "[")
-    internal static let closeArray = UInt8(ascii: "]")
-
-    internal static let quote = UInt8(ascii: "\"")
-    internal static let backslash = UInt8(ascii: "\\")
-
-}
-
-extension Array where Element == UInt8 {
-
-    internal static let _true = [UInt8(ascii: "t"), UInt8(ascii: "r"), UInt8(ascii: "u"), UInt8(ascii: "e")]
-    internal static let _false = [UInt8(ascii: "f"), UInt8(ascii: "a"), UInt8(ascii: "l"), UInt8(ascii: "s"), UInt8(ascii: "e")]
-    internal static let _null = [UInt8(ascii: "n"), UInt8(ascii: "u"), UInt8(ascii: "l"), UInt8(ascii: "l")]
-
+    static let quote = UInt8(ascii: "\"")
+    static let backslash = UInt8(ascii: "\\")
 }

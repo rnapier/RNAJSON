@@ -384,3 +384,106 @@ extension JSONValue: CustomStringConvertible {
         }
     }
 }
+
+extension JSONValue: Decodable {
+    public init(from decoder: Decoder) throws {
+        if let string = try? decoder.singleValueContainer().decode(String.self) { self = .string(string) }
+
+        else if let number = try? decoder.singleValueContainer().decode(Decimal.self) { self = .number(digits: "\(number)") }
+
+        else if let bool = try? decoder.singleValueContainer().decode(Bool.self) { self = .bool(bool) }
+
+        else if let object = try? decoder.container(keyedBy: StringKey.self) {
+            let pairs = try object.allKeys.map(\.stringValue).map { key in
+                (key, try object.decode(JSONValue.self, forKey: StringKey(key)))
+            }
+            self = .object(keyValues: pairs)
+        }
+
+        else if var array = try? decoder.unkeyedContainer() {
+            var result: [JSONValue] = []
+            while !array.isAtEnd {
+                result.append(try array.decode(JSONValue.self))
+            }
+            self = .array(result)
+        }
+
+        else if let isNull = try? decoder.singleValueContainer().decodeNil(), isNull { self = .null }
+
+        else { throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: [],
+                                                                       debugDescription: "Unknown JSON type")) }
+    }
+}
+
+extension JSONValue {
+    public init<S: AsyncSequence>(from tokens: S) async throws
+    where S.Element == JSONToken {
+        var tokenIterator = tokens.makeAsyncIterator()
+
+        guard let value = try await JSONValue(iterator: &tokenIterator) else { throw JSONError.missingValue }
+        guard try await tokenIterator.next() == nil else { throw JSONError.typeMismatch } // FIXME: Fix error
+
+        self = value
+    }
+
+    private init?<I: AsyncIteratorProtocol>(iterator: inout I) async throws
+    where I.Element == JSONToken {
+
+        guard let token = try await iterator.next() else { return nil }
+
+        switch token {
+
+        case .arrayOpen:
+            var values: JSONArray = []
+            while let token = try await iterator.next(), token != .arrayClose {
+                guard let value = try await JSONValue(iterator: &iterator) else { throw JSONError.missingValue }
+                values.append(value)
+            }
+            self = .array(values)
+
+        case .arrayClose:
+            fatalError()
+
+        case .objectOpen:
+            var keyValues: JSONKeyValues = []
+            while let token = try await iterator.next(), token != .objectClose {
+                guard case let .objectKey(key) = token,
+                      let value = try await JSONValue(iterator: &iterator)
+                else { fatalError() }
+
+                keyValues.append((key: key, value: value))
+            }
+            self = .object(keyValues: keyValues)
+
+        case .objectKey(_):
+            fatalError()
+        case .objectClose:
+            fatalError()
+        case .true:
+            self = .bool(true)
+        case .false:
+            self = .bool(false)
+        case .null:
+            self = .null
+        case .string(let string):
+            self = .string(string)
+        case .number(let digits):
+            self = .number(digits: digits)
+        }
+    }
+}
+
+// MARK: - StringKey
+private struct StringKey: CodingKey, Hashable, Comparable, CustomStringConvertible, ExpressibleByStringLiteral {
+    public var description: String { stringValue }
+
+    public let stringValue: String
+    public init(_ string: String) { self.stringValue = string }
+    public init?(stringValue: String) { self.init(stringValue) }
+    public var intValue: Int? { nil }
+    public init?(intValue: Int) { nil }
+
+    public static func < (lhs: StringKey, rhs: StringKey) -> Bool { lhs.stringValue < rhs.stringValue }
+
+    public init(stringLiteral value: String) { self.init(value) }
+}

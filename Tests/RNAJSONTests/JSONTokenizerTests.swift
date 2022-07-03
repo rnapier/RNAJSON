@@ -68,11 +68,11 @@ final class JSONTokenizerTests: XCTestCase {
         """.utf8).async
 
         let expected: [JSONToken] =
-        []
+        [true]
 
         try await XCTAssert(json.jsonTokens,
                             returns: expected,
-                            throws: .corruptedLiteral(expected: "true", Location(line: 1, column: 4, index: 4)))
+                            throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"), Location(line: 1, column: 4, index: 4)))
     }
 
     // pass1
