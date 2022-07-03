@@ -33,14 +33,12 @@ final class JSONPointerTests: XCTestCase {
 """.utf8)
 
     func testJSONParse() async throws {
-        let json1 = try JSONDecoder().decode(JSONValue.self, from: Data(aerodactyl))
 
         let tokens = AsyncJSONTokenSequence(aerodactyl.async)
+        let result = try await JSONValue(from: tokens)
 
-        let json2 = try await JSONValue(from: tokens)
+        let expected = try JSONDecoder().decode(JSONValue.self, from: Data(aerodactyl))
 
-        XCTAssertEqual(json1, json2)
+        XCTAssertEqual(result.normalized(), expected.normalized())
     }
-
-
 }

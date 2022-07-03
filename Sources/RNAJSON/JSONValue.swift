@@ -33,6 +33,24 @@ extension JSONValue {
     }
 }
 
+extension JSONValue {
+    // Sorts all nested objects by key and removes duplicate keys (keeping last value).
+    public func normalized() -> JSONValue {
+        switch self {
+        case .object(keyValues: let keyValues):
+            return .object(keyValues:
+                            Dictionary(keyValues, uniquingKeysWith: { _, last in last })
+                .map { (key: $0, value: $1.normalized()) }
+                .sorted(by: { $0.key < $1.key }))
+
+        case .array(let values):
+            return .array(values.map { $0.normalized() })
+
+        default: return self
+        }
+    }
+}
+
 // ExpressibleBy...Literal
 extension JSONValue: ExpressibleByStringLiteral {
     public init(stringLiteral value: StringLiteralType) {
@@ -165,9 +183,10 @@ extension JSONValue {
         return object
     }
 
+    // Uniques keys using last value
     public func dictionaryValue() throws -> [String: JSONValue] {
         guard case let .object(object) = self else { throw JSONError.typeMismatch }
-        return Dictionary(object, uniquingKeysWith: { first, _ in first })
+        return Dictionary(object, uniquingKeysWith: { _, last in last })
     }
 
     public func value(for key: String) throws -> JSONValue {
@@ -430,27 +449,25 @@ extension JSONValue {
     where I.Element == JSONToken {
 
         guard let token = try await iterator.next() else { return nil }
-
+        print("Read \(token)")
         switch token {
 
         case .arrayOpen:
             var values: JSONArray = []
-            while let token = try await iterator.next(), token != .arrayClose {
-                guard let value = try await JSONValue(iterator: &iterator) else { throw JSONError.missingValue }
+            while let value = try await JSONValue(iterator: &iterator) {
                 values.append(value)
             }
             self = .array(values)
 
         case .arrayClose:
-            fatalError()
+            return nil
 
         case .objectOpen:
             var keyValues: JSONKeyValues = []
-            while let token = try await iterator.next(), token != .objectClose {
-                guard case let .objectKey(key) = token,
-                      let value = try await JSONValue(iterator: &iterator)
-                else { fatalError() }
 
+            while case let .objectKey(key) = try await iterator.next(),
+                  let value = try await JSONValue(iterator: &iterator)
+            {
                 keyValues.append((key: key, value: value))
             }
             self = .object(keyValues: keyValues)
@@ -458,7 +475,7 @@ extension JSONValue {
         case .objectKey(_):
             fatalError()
         case .objectClose:
-            fatalError()
+            return nil
         case .true:
             self = .bool(true)
         case .false:

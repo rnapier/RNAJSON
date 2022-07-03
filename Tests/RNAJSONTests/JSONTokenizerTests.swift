@@ -883,8 +883,60 @@ final class JSONTokenizerTests: XCTestCase {
                             throws: .unexpectedEndOfFile(Location(line: 1, column: 3, index: 3)))
     }
 
-}
+    func testArrayOfObjects() async throws {
+        let json = Data(#"""
+        {
+            "id": 142,
+            "name": "aerodactyl",
+            "types": [{
+                    "type": {
+                        "name": "rock",
+                        "url": "https://pokeapi.co/api/v2/type/6/"
+                    },
+                    "slot": 1
+                },
+                {
+                    "type": {
+                        "name": "flying",
+                        "url": "https://pokeapi.co/api/v2/type/3/"
+                    },
+                    "slot": 2
+                }
+            ]
+        }
+        """#.utf8).async
 
+        let expected: [JSONToken] =
+        [
+            .objectOpen,
+            .objectKey("id"), .number("142"),
+            .objectKey("name"), .string("aerodactyl"),
+            .objectKey("types"),
+            .arrayOpen,
+            .objectOpen,
+            .objectKey("type"), .objectOpen,
+            .objectKey("name"), .string("rock"),
+            .objectKey("url"), .string("https://pokeapi.co/api/v2/type/6/"),
+            .objectClose,
+            .objectKey("slot"), .number("1"),
+            .objectClose,
+            .objectOpen,
+            .objectKey("type"), .objectOpen,
+            .objectKey("name"), .string("flying"),
+            .objectKey("url"), .string("https://pokeapi.co/api/v2/type/3/"),
+            .objectClose,
+            .objectKey("slot"), .number("2"),
+            .objectClose,
+            .arrayClose,
+            .objectClose
+        ]
+
+
+        try await XCTAssertDeepEqual(json.jsonTokens, expected)
+
+    }
+
+}
 
 
 private extension XCTest {
