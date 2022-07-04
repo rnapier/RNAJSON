@@ -8,23 +8,20 @@
 import XCTest
 import RNAJSON
 
-
 final class JSONValueTests: XCTestCase {
     func testSingleDigit() async throws {
         let json = Data("""
         1
-        """.utf8).async
-        let result = try await JSONValue(from: json.jsonTokens)
+        """.utf8)
+        let result = try await JSONValue(decoding: json)
         XCTAssertEqual(result, 1)
     }
 
     func testInteger() async throws {
         let json = Data("""
         10
-        """.utf8).async
-        let result = try await JSONValue(from: json.jsonTokens)
+        """.utf8)
+        let result = try await JSONValue(decoding: json)
         XCTAssertEqual(result, 10)
     }
-
-
 }

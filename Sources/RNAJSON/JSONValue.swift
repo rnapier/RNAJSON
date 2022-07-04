@@ -451,7 +451,6 @@ extension JSONValue {
     where I.Element == JSONToken {
 
         guard let token = try await iterator.next() else { return nil }
-        print("Read \(token)")
         switch token {
 
         case .arrayOpen:
@@ -489,6 +488,10 @@ extension JSONValue {
         case .number(let digits):
             self = .number(digits: digits)
         }
+    }
+
+    public init(decoding sequence: some Sequence<UInt8>, strict: Bool = false) async throws {
+        try await self.init(from: AsyncJSONTokenSequence(sequence))
     }
 }
 

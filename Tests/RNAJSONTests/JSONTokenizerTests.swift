@@ -9,68 +9,68 @@ final class JSONTokenizerTests: XCTestCase {
     func testSingleDigit() async throws {
         let json = Data("""
         1
-        """.utf8).async
-        let result = try await Array(json.jsonTokens)
+        """.utf8)
+        let result = try await Array(AsyncJSONTokenSequence(json))
         XCTAssertEqual(result, [1])
     }
 
     func testInteger() async throws {
         let json = Data("""
         10
-        """.utf8).async
-        let result = try await Array(json.jsonTokens)
+        """.utf8)
+        let result = try await Array(AsyncJSONTokenSequence(json))
         XCTAssertEqual(result, [10])
     }
 
     func testFloat() async throws {
         let json = Data("""
         10.1
-        """.utf8).async
-        let result = try await Array(json.jsonTokens)
+        """.utf8)
+        let result = try await Array(AsyncJSONTokenSequence(json))
         XCTAssertEqual(result, [10.1])
     }
 
     func testSingleLetter() async throws {
         let json = Data("""
         "a"
-        """.utf8).async
-        let result = try await Array(json.jsonTokens)
+        """.utf8)
+        let result = try await Array(AsyncJSONTokenSequence(json))
         XCTAssertEqual(result, ["a"])
     }
 
     func testString() async throws {
         let json = Data("""
         "testString"
-        """.utf8).async
-        let result = try await Array(json.jsonTokens)
+        """.utf8)
+        let result = try await Array(AsyncJSONTokenSequence(json))
         XCTAssertEqual(result, ["testString"])
     }
 
     func testQuote() async throws {
         let json = Data(#"""
         "\""
-        """#.utf8).async
-        let result = try await Array(json.jsonTokens)
+        """#.utf8)
+        let result = try await Array(AsyncJSONTokenSequence(json))
         XCTAssertEqual(result, ["\""])
     }
 
     func testCompactArray() async throws {
         let json = Data("""
         [1,2,3]
-        """.utf8).async
-        let result = try await Array(json.jsonTokens)
+        """.utf8)
+        let result = try await Array(AsyncJSONTokenSequence(json))
         XCTAssertEqual(result, [.arrayOpen, 1, 2, 3, .arrayClose])
     }
 
     func testRunOnLiteral() async throws {
         let json = Data("""
         trueabc
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [true]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"), Location(line: 1, column: 4, index: 4)))
     }
@@ -136,7 +136,7 @@ final class JSONTokenizerTests: XCTestCase {
         1e-1,
         1e00,2e+00,2e-00
         ,"rosebud"]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen,
@@ -193,25 +193,25 @@ final class JSONTokenizerTests: XCTestCase {
          .digits("2e-00"),
          "rosebud", .arrayClose]
 
-        try await XCTAssertDeepEqual(json.jsonTokens, expected)
+        try await XCTAssertDeepEqual(AsyncJSONTokenSequence(json), expected)
     }
 
     // pass2
     func testDeepJSON() async throws {
         let url = Bundle.module.url(forResource: "json.org/pass2.json", withExtension: nil)!
-        let json = try Data(contentsOf: url).async
+        let json = try Data(contentsOf: url)
 
         let expected: [JSONToken] =
         repeatElement(JSONToken.arrayOpen, count: 19) + ["Not too deep"] + repeatElement(JSONToken.arrayClose, count: 19)
 
-        try await XCTAssertDeepEqual(json.jsonTokens, expected)
+        try await XCTAssertDeepEqual(AsyncJSONTokenSequence(json), expected)
     }
 
     // fail1
     func testDisallowedFragments() async throws {
         let json = Array("""
         "A JSON payload should be an object or array, not a string."
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         []
@@ -227,12 +227,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testUnclosedArray() async throws {
         let json = Array("""
         ["Unclosed array"
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "Unclosed array"]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEndOfFile(Location(line: 1, column: 17, index: 17)))
     }
@@ -241,12 +241,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testUnquotedKey() async throws {
         let json = Data("""
         {unquoted_key: "keys must be quoted"}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .missingKey(Location(line: 1, column: 1, index: 1)))
     }
@@ -255,7 +255,7 @@ final class JSONTokenizerTests: XCTestCase {
     func testExtraCommaStrict() async throws {
         let json = Data("""
         ["extra comma",]
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "extra comma"]
@@ -270,24 +270,24 @@ final class JSONTokenizerTests: XCTestCase {
     func testExtraCommaAllowed() async throws {
         let json = Data("""
         ["extra comma",]
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "extra comma", .arrayClose]
 
-        try await XCTAssertDeepEqual(json.jsonTokens, expected)
+        try await XCTAssertDeepEqual(AsyncJSONTokenSequence(json), expected)
     }
 
     // fail5
     func testDoubleExtraComma() async throws {
         let json = Data("""
         ["double extra comma",,]
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "double extra comma"]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
                                                          Location(line: 1, column: 22, index: 22)))
@@ -297,12 +297,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testMissingValue() async throws {
         let json = Data("""
         [   , "<-- missing value"]
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
                                                          Location(line: 1, column: 4, index: 4)))
@@ -312,12 +312,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testCommaAfterTheClose() async throws {
         let json = Data("""
         ["Comma after the close"],
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "Comma after the close", .arrayClose]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ","),
                                                          Location(line: 1, column: 25, index: 25)))
@@ -327,12 +327,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testExtraClose() async throws {
         let json = Data("""
         ["Extra close"]]
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "Extra close", .arrayClose]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "]"),
                                                          Location(line: 1, column: 15, index: 15)))
@@ -342,7 +342,7 @@ final class JSONTokenizerTests: XCTestCase {
     func testExtraCommaObjectStrict() async throws {
         let json = Data("""
         {"Extra comma": true,}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Extra comma"), .true]
@@ -356,24 +356,24 @@ final class JSONTokenizerTests: XCTestCase {
     func testExtraCommaObjectAllowed() async throws {
         let json = Data("""
         {"Extra comma": true,}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Extra comma"), .true, .objectClose]
 
-        try await XCTAssertDeepEqual(json.jsonTokens, expected)
+        try await XCTAssertDeepEqual(AsyncJSONTokenSequence(json), expected)
     }
 
     // fail10
     func testExtraValueAfterClose() async throws {
         let json = Data("""
         {"Extra value after close": true} "misplaced quoted value"
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Extra value after close"), .true, .objectClose]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "\""),
                                                          Location(line: 1, column: 34, index: 34)))
@@ -383,12 +383,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testIllegalExpression() async throws {
         let json = Data("""
         {"Illegal expression": 1 + 2}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Illegal expression"), 1]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "+"),
                                                          Location(line: 1, column: 25, index: 25)))
@@ -398,12 +398,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testIllegalInvocation() async throws {
         let json = Data("""
         {"Illegal invocation": alert()}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Illegal invocation")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "a"),
                                                          Location(line: 1, column: 23, index: 23)))
@@ -413,12 +413,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testLeadingZeros() async throws {
         let json = Data("""
         {"Numbers cannot have leading zeroes": 013}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Numbers cannot have leading zeroes")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .numberWithLeadingZero(Location(line: 1, column: 40, index: 40)))
     }
@@ -426,12 +426,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testDoubleLeadingZeros() async throws {
         let json = Data("""
         {"Numbers cannot have leading zeroes": 0013}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Numbers cannot have leading zeroes")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .numberWithLeadingZero(Location(line: 1, column: 40, index: 40)))
     }
@@ -439,12 +439,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testMinusLeadingZero() async throws {
         let json = Data("""
         {"Numbers cannot have leading zeroes": -013}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Numbers cannot have leading zeroes")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .numberWithLeadingZero(Location(line: 1, column: 41, index: 41)))
     }
@@ -453,12 +453,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testNumbersCannotBeHex() async throws {
         let json = Data("""
         {"Numbers cannot be hex": 0x14}
-        """.utf8).async
+        """.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Numbers cannot be hex")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "x"),
                                                          Location(line: 1, column: 27, index: 27)))
@@ -468,12 +468,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testIllegalBackslashEscape() async throws {
         let json = Data(#"""
         ["Illegal backslash escape: \x15"]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "x"), in: "Illegal backslash escape: ",
                                                                 Location(line: 1, column: 29, index: 29)))
@@ -483,12 +483,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testBackslashOutsideString() async throws {
         let json = Data(#"""
         [\naked]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "\\"),
                                                          Location(line: 1, column: 1, index: 1)))
@@ -498,12 +498,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testIllegalBackslashEscapeWithLeadingZero() async throws {
         let json = Data(#"""
         ["Illegal backslash escape: \017"]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "0"), in: "Illegal backslash escape: ",
                                                                 Location(line: 1, column: 29, index: 29)))
@@ -513,12 +513,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testMissingColon() async throws {
         let json = Data(#"""
         {"Missing colon" null}
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Missing colon")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .missingObjectValue(Location(line: 1, column: 17, index: 17)))
     }
@@ -527,12 +527,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testDoubleColon() async throws {
         let json = Data(#"""
         {"Double colon":: null}
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Double colon")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ":"),
                                                          Location(line: 1, column: 16, index: 16)))
@@ -542,12 +542,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testCommaInsteadOfColon() async throws {
         let json = Data(#"""
         {"Comma instead of colon", null}
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Comma instead of colon")]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .missingObjectValue(Location(line: 1, column: 25, index: 25)))
     }
@@ -556,12 +556,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testColonInsteadOfComma() async throws {
         let json = Data(#"""
         ["Colon instead of comma": false]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "Colon instead of comma"]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: ":"),
                                                          Location(line: 1, column: 25, index: 25)))
@@ -572,12 +572,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testBadValue() async throws {
         let json = Data(#"""
         ["Bad value", truth]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "Bad value"]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .corruptedLiteral(expected: "true",
                                                          Location(line: 1, column: 17, index: 17)))
@@ -587,12 +587,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testSingleQuote() async throws {
         let json = Data(#"""
         ['single quote']
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "'"),
                                                          Location(line: 1, column: 1, index: 1)))
@@ -600,12 +600,12 @@ final class JSONTokenizerTests: XCTestCase {
 
     // fail25
     func testTabCharacterInString() async throws {
-        let json = Data("[\"\ttab\tcharacter\tin\tstring\t\"]".utf8).async
+        let json = Data("[\"\ttab\tcharacter\tin\tstring\t\"]".utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\t"), in: "",
                                                                        Location(line: 1, column: 2, index: 2)))
@@ -615,12 +615,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testEscapedSpacesInString() async throws {
         let json = Data(#"""
         ["tab\   character\   in\  string\  "]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: " "), in: "tab",
                                                                 Location(line: 1, column: 6, index: 6)))
@@ -631,12 +631,12 @@ final class JSONTokenizerTests: XCTestCase {
         let json = Data(#"""
         ["line
         break"]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unescapedControlCharacterInString(ascii: UInt8(ascii: "\n"), in: "line",
                                                                        Location(line: 2, column: 0, index: 6)))
@@ -647,12 +647,12 @@ final class JSONTokenizerTests: XCTestCase {
         let json = Data(#"""
         ["line\
         break"]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEscapedCharacter(ascii: UInt8(ascii: "\n"), in: "line",
                                                                 Location(line: 2, column: 0, index: 7)))
@@ -662,12 +662,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testInvalidExpNumber() async throws {
         let json = Data(#"""
         [0e]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .missingExponent(Location(line: 1, column: 3, index: 3)))
     }
@@ -676,12 +676,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testInvalidExpNumberWithOperator() async throws {
         let json = Data(#"""
         [0e+]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .missingExponent(Location(line: 1, column: 4, index: 4)))
     }
@@ -690,12 +690,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testTooManyExpSigns() async throws {
         let json = Data(#"""
         [0e+-1]
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "-"), Location(line: 1, column: 4, index: 4)))
     }
@@ -704,12 +704,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testCommaInsteadOfClosingBrace() async throws {
         let json = Data(#"""
         {"Comma instead if closing brace": true,
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.objectOpen, .key("Comma instead if closing brace"), .true]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEndOfFile(Location(line: 1, column: 40, index: 40)))
     }
@@ -718,12 +718,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testBraceMismatch() async throws {
         let json = Data(#"""
         ["mismatch"}
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen, "mismatch"]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "}"), Location(line: 1, column: 11, index: 11)))
     }
@@ -731,12 +731,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testTrailingEscape() async throws {
         let json = Data(#"""
         ["trailing escape \
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.arrayOpen]
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEndOfFile(Location(line: 1, column:19, index: 19)))
 
@@ -745,23 +745,23 @@ final class JSONTokenizerTests: XCTestCase {
     func testSurrogatePairs() async throws {
         let json = Data(#"""
         "\uD834\uDD1E"
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [.string("\u{1D11E}")]
 
-        try await XCTAssertDeepEqual(json.jsonTokens, expected)
+        try await XCTAssertDeepEqual(AsyncJSONTokenSequence(json), expected)
     }
 
     func testMissingLowSurrogatePair() async throws {
         let json = Data(#"""
         "\uD834"
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: "", Location(line: 1, column: 7, index: 7)))
     }
@@ -769,12 +769,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testInvalidLowSurrogatePair() async throws {
         let json = Data(#"""
         "\uD834\uD834"
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: "", Location(line: 1, column: 12, index: 12)))
     }
@@ -782,12 +782,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testOutOfRangeUnicode() async throws {
         let json = Data(#"""
         "\uDD1E\uD834"
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .couldNotCreateUnicodeScalarFromUInt32(in: "", Location(line: 1, column: 6, index: 6), unicodeScalarValue: 56606))
     }
@@ -795,12 +795,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testTruncatedUnicode() async throws {
         let json = Data(#"""
         "\u12
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEndOfFile(Location(line: 1, column: 5, index: 5)))
     }
@@ -808,12 +808,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testInvalidHex() async throws {
         let json = Data(#"""
         "\u012x"
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .invalidHexDigitSequence("012x", Location(line: 1, column: 6, index: 6)))
     }
@@ -821,12 +821,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testDecimalAfterMinus() async throws {
         let json = Data(#"""
         -.1
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "."), Location(line: 1, column: 1, index: 1)))
     }
@@ -834,12 +834,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testEAfterMinus() async throws {
         let json = Data(#"""
         -e1
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: "e"), Location(line: 1, column: 1, index: 1)))
     }
@@ -847,12 +847,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testSpaceAfterMinus() async throws {
         let json = Data(#"""
         - 1
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedCharacter(ascii: UInt8(ascii: " "), Location(line: 1, column: 1, index: 1)))
     }
@@ -860,12 +860,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testEndOfFileAfterMinus() async throws {
         let json = Data(#"""
         -
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEndOfFile(Location(line: 1, column: 1, index: 1)))
     }
@@ -873,12 +873,12 @@ final class JSONTokenizerTests: XCTestCase {
     func testTruncatedLiteral() async throws {
         let json = Data(#"""
         tru
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         []
 
-        try await XCTAssert(json.jsonTokens,
+        try await XCTAssert(AsyncJSONTokenSequence(json),
                             returns: expected,
                             throws: .unexpectedEndOfFile(Location(line: 1, column: 3, index: 3)))
     }
@@ -904,7 +904,7 @@ final class JSONTokenizerTests: XCTestCase {
                 }
             ]
         }
-        """#.utf8).async
+        """#.utf8)
 
         let expected: [JSONToken] =
         [
@@ -931,11 +931,8 @@ final class JSONTokenizerTests: XCTestCase {
             .objectClose
         ]
 
-
-        try await XCTAssertDeepEqual(json.jsonTokens, expected)
-
+        try await XCTAssertDeepEqual(AsyncJSONTokenSequence(json), expected)
     }
-
 }
 
 

@@ -10,7 +10,7 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         private typealias Location = JSONError.Location
 
         var strict: Bool
-        var byteSource: Base.AsyncIterator
+        var byteSource: Base.AsyncIterator?
         var peek: UInt8? = nil {
             didSet {
                 if peek != nil {
@@ -50,12 +50,16 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
 
         public mutating func next() async throws -> JSONToken? {
             func nextByte() async throws -> UInt8? {
+                guard !Task.isCancelled else {
+                    byteSource = nil
+                    return nil
+                }
                 var result: UInt8?
                 if let peek {
                     result = peek
                     self.peek = nil
                 } else {
-                    result = try await byteSource.next()
+                    result = try await byteSource?.next()
                 }
 
                 if result == .newline {
@@ -431,17 +435,25 @@ public struct AsyncJSONTokenSequence<Base: AsyncSequence>: AsyncSequence where B
         self.base = base
         self.strict = strict
     }
-}
 
-public extension AsyncSequence where Self.Element == UInt8 {
-    /**
-     A non-blocking sequence of  `JSONTokens` created by decoding the elements of `self`.
-     */
-    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
-    var jsonTokens: AsyncJSONTokenSequence<Self> {
-        AsyncJSONTokenSequence(self)
+    public init(_ sequence: some Sequence<UInt8>, strict: Bool = false) where Base == AsyncThrowingStream<UInt8, Error> {
+        var iterator = sequence.makeIterator()
+        self.base = AsyncThrowingStream(unfolding: {
+            iterator.next()
+        })
+        self.strict = strict
     }
 }
+
+//public extension AsyncSequence where Self.Element == UInt8 {
+//    /**
+//     A non-blocking sequence of  `JSONTokens` created by decoding the elements of `self`.
+//     */
+//    @available(macOS 12.0, iOS 15.0, tvOS 15.0, watchOS 8.0, *)
+//    var jsonTokens: AsyncJSONTokenSequence<Self> {
+//        AsyncJSONTokenSequence(self)
+//    }
+//}
 
 internal extension UInt8 {
     static let space = UInt8(ascii: " ")
@@ -461,3 +473,4 @@ internal extension UInt8 {
     static let quote = UInt8(ascii: "\"")
     static let backslash = UInt8(ascii: "\\")
 }
+

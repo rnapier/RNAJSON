@@ -34,14 +34,13 @@ final class JSONPointerTests: XCTestCase {
 
     func testJSONParse() async throws {
 
-        let tokens = AsyncJSONTokenSequence(aerodactyl.async)
+        let tokens = AsyncJSONTokenSequence(aerodactyl)
         let result = try await JSONValue(from: tokens)
 
         let expected = try JSONDecoder().decode(JSONValue.self, from: Data(aerodactyl))
 
         try XCTAssertDeepEquivalent(result, expected)
-    }
-    
+    }    
 }
 
 private extension XCTest {
