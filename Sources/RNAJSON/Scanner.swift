@@ -7,54 +7,6 @@
 
 import Foundation
 
-//struct JSONScanner {
-//    func subdata(fromJSONData data: Data, forPath path: some Collection<CodingKey>) throws -> Data? {
-//
-//     }
-//
-//    private let whitespace: Set<UInt8> = [.space, .return, .newline, .tab]
-//
-//    private func firstValue(from data: Data) throws -> Data? {
-//        let data = data.drop(while: { whitespace.contains($0)})
-//
-////        guard let first = data.first else { return nil }
-//
-//        guard let result = try
-//                leadingObject(in: data) ??
-//                leadingArray(in: data) ??
-//                leadingString(in: data) ??
-//                leadingNumber(in: data) ??
-//                leadingLiteral(in: data)
-//        else {
-//            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "")) // FIXME: Better error
-//        }
-//        return result
-//    }
-//
-//    private func arrayElement(at index: Data.Index, in data: Data) throws -> Data? {
-//
-//    }
-//
-//    private func objectValue(forKey key: String, in data: Data) throws -> Data? {
-//
-//    }
-//
-//    private func leadingObject(in data: Data) throws -> Data? {
-//
-//        guard var endIndex = maybeConsume(.openObject) else { return nil }
-//
-//
-//    }
-//
-//    private func leadingArray(in data: Data) throws -> Data? {
-//
-//    }
-//
-//    private func leadingString(in data: Data) throws -> Data? {}
-//    private func leadingNumber(in data: Data) throws -> Data? {}
-//    private func leadingLiteral(in data: Data) throws -> Data? {}
-//
-//}
 public enum JSONScannerError: Swift.Error, Equatable {
     case cannotConvertInputDataToUTF8
     case unexpectedCharacter(ascii: UInt8, characterIndex: Int)
@@ -81,65 +33,35 @@ public struct JSONScanner {
     public mutating func dataForBody() throws -> some Collection<UInt8> {
         try reader.consumeWhitespace()
         let startIndex = reader.readerIndex
-        try parseValue()
+        try consumeValue()
         return reader.array[startIndex..<reader.readerIndex]
     }
 
-    mutating func parse() throws /* -> JSONValue */ {
-        try reader.consumeWhitespace()
-        /*let value = */try self.parseValue()
-        #if DEBUG
-        defer {
-            guard self.depth == 0 else {
-                preconditionFailure("Expected to end parsing with a depth of 0")
-            }
-        }
-        #endif
-
-        // ensure only white space is remaining
-        var whitespace = 0
-        while let next = reader.peek(offset: whitespace) {
-            switch next {
-            case .space, .tab, .return, .newline:
-                whitespace += 1
-                continue
-            default:
-                throw JSONScannerError.unexpectedCharacter(ascii: next, characterIndex: reader.readerIndex + whitespace)
-            }
-        }
-
-        return //value
-    }
-
     // MARK: Generic Value Parsing
-    mutating func parseValue() throws /* -> JSONValue */ {
+    mutating func consumeValue() throws {
         var whitespace = 0
         while let byte = reader.peek(offset: whitespace) {
             switch byte {
             case UInt8(ascii: "\""):
                 reader.moveReaderIndex(forwardBy: whitespace)
                 try reader.readString()
-                return // .string(try reader.readString())
+                return
             case .openObject:
                 reader.moveReaderIndex(forwardBy: whitespace)
-                /*let object = */try parseObject()
-                return // .object(object)
+                try consumeObject()
+                return
             case .openArray:
                 reader.moveReaderIndex(forwardBy: whitespace)
-                /*let array = */try parseArray()
-                return //.array(array)
-            case UInt8(ascii: "f"), UInt8(ascii: "t"):
+                try consumeArray()
+                return
+            case UInt8(ascii: "f"), UInt8(ascii: "t"), UInt8(ascii: "n"):
                 reader.moveReaderIndex(forwardBy: whitespace)
-                /*let bool = */try reader.readBool()
-                return //.bool(bool)
-            case UInt8(ascii: "n"):
-                reader.moveReaderIndex(forwardBy: whitespace)
-                try reader.readNull()
-                return //.null
+                try reader.consumeLiteral()
+                return
             case UInt8(ascii: "-"), UInt8(ascii: "0") ... UInt8(ascii: "9"):
                 reader.moveReaderIndex(forwardBy: whitespace)
-                /*let number = */try self.reader.readNumber()
-                return //.number(number)
+                try self.reader.consumeNumber()
+                return
             case .space, .return, .newline, .tab:
                 whitespace += 1
                 continue
@@ -153,7 +75,7 @@ public struct JSONScanner {
 
 
     // MARK: - Parse Array -
-    mutating func parseArray() throws /*-> [JSONValue] */{
+    mutating func consumeArray() throws {
         precondition(self.reader.read() == .openArray)
         guard self.depth < 512 else {
             throw JSONScannerError.tooManyNestedArraysOrDictionaries(characterIndex: self.reader.readerIndex - 1)
@@ -168,18 +90,14 @@ public struct JSONScanner {
         case .closeArray:
             // if the first char after whitespace is a closing bracket, we found an empty array
             self.reader.moveReaderIndex(forwardBy: 1)
-            return //[]
+            return
         default:
             break
         }
 
-        var array = [JSONValue]()
-        array.reserveCapacity(10)
-
         // parse values
         while true {
-            /*let value =*/  try parseValue()
-//            array.append(value)
+            try consumeValue()
 
             // consume the whitespace after the value before the comma
             let ascii = try reader.consumeWhitespace()
@@ -188,7 +106,7 @@ public struct JSONScanner {
                 preconditionFailure("Expected that all white space is consumed")
             case .closeArray:
                 reader.moveReaderIndex(forwardBy: 1)
-                return //array
+                return
             case .comma:
                 // consume the comma
                 reader.moveReaderIndex(forwardBy: 1)
@@ -196,7 +114,7 @@ public struct JSONScanner {
                 if try reader.consumeWhitespace() == .closeArray {
                     // the foundation json implementation does support trailing commas
                     reader.moveReaderIndex(forwardBy: 1)
-                    return//array
+                    return
                 }
                 continue
             default:
@@ -206,7 +124,7 @@ public struct JSONScanner {
     }
 
     // MARK: - Object parsing -
-    mutating func parseObject() throws /*-> [String: JSONValue]*/ {
+    mutating func consumeObject() throws /*-> [String: JSONValue]*/ {
          precondition(self.reader.read() == .openObject)
         guard self.depth < 512 else {
             throw JSONScannerError.tooManyNestedArraysOrDictionaries(characterIndex: self.reader.readerIndex - 1)
@@ -221,13 +139,10 @@ public struct JSONScanner {
         case .closeObject:
             // if the first char after whitespace is a closing bracket, we found an empty array
             self.reader.moveReaderIndex(forwardBy: 1)
-            return //[:]
+            return
         default:
             break
         }
-
-        var object = [String: JSONValue]()
-        object.reserveCapacity(20)
 
         while true {
             /*let key = */try reader.readString()
@@ -237,19 +152,19 @@ public struct JSONScanner {
             }
             reader.moveReaderIndex(forwardBy: 1)
             try reader.consumeWhitespace()
-            /*object[key] =*/ try self.parseValue()
+            try self.consumeValue()
 
             let commaOrBrace = try reader.consumeWhitespace()
             switch commaOrBrace {
             case .closeObject:
                 reader.moveReaderIndex(forwardBy: 1)
-                return //object
+                return
             case .comma:
                 reader.moveReaderIndex(forwardBy: 1)
                 if try reader.consumeWhitespace() == .closeObject {
                     // the foundation json implementation does support trailing commas
                     reader.moveReaderIndex(forwardBy: 1)
-                    return //object
+                    return
                 }
                 continue
             default:
@@ -273,7 +188,6 @@ extension JSONScanner {
         var isEOF: Bool {
             self.readerIndex >= self.array.endIndex
         }
-
 
         init(array: [UInt8]) {
             self.array = array
@@ -327,11 +241,11 @@ extension JSONScanner {
             try self.readUTF8StringTillNextUnescapedQuote()
         }
 
-        mutating func readNumber() throws /*-> String */{
+        mutating func consumeNumber() throws /*-> String */{
             try self.parseNumber()
         }
 
-        mutating func readBool() throws /*-> Bool */ {
+        mutating func consumeLiteral() throws /*-> Bool */ {
             switch self.read() {
             case UInt8(ascii: "t"):
                 guard self.read() == UInt8(ascii: "r"),
@@ -345,7 +259,6 @@ extension JSONScanner {
                     throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
                 }
 
-                return //true
             case UInt8(ascii: "f"):
                 guard self.read() == UInt8(ascii: "a"),
                       self.read() == UInt8(ascii: "l"),
@@ -359,23 +272,20 @@ extension JSONScanner {
                     throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
                 }
 
-                return //false
-            default:
-                preconditionFailure("Expected to have `t` or `f` as first character")
-            }
-        }
+            case UInt8(ascii: "n"):
+                guard self.read() == UInt8(ascii: "u"),
+                      self.read() == UInt8(ascii: "l"),
+                      self.read() == UInt8(ascii: "l")
+                else {
+                    guard !self.isEOF else {
+                        throw JSONScannerError.unexpectedEndOfFile
+                    }
 
-        mutating func readNull() throws {
-            guard self.read() == UInt8(ascii: "n"),
-                  self.read() == UInt8(ascii: "u"),
-                  self.read() == UInt8(ascii: "l"),
-                  self.read() == UInt8(ascii: "l")
-            else {
-                guard !self.isEOF else {
-                    throw JSONScannerError.unexpectedEndOfFile
+                    throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
                 }
 
-                throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
+            default:
+                preconditionFailure("Expected to have `t` or `f` as first character")
             }
         }
 
@@ -587,7 +497,7 @@ extension JSONScanner {
             case expOperator
         }
 
-        private mutating func parseNumber() throws /*-> String */ {
+        private mutating func parseNumber() throws {
             var pastControlChar: ControlCharacter = .operand
             var numbersSinceControlChar: UInt = 0
             var hasLeadingZero = false
@@ -668,7 +578,7 @@ extension JSONScanner {
                     //let numberStartIndex = self.readerIndex
                     self.moveReaderIndex(forwardBy: numberchars)
 
-                    return //self.makeStringFast(self[numberStartIndex ..< self.readerIndex])
+                    return
                 default:
                     throw JSONScannerError.unexpectedCharacter(ascii: byte, characterIndex: readerIndex + numberchars)
                 }
@@ -679,7 +589,7 @@ extension JSONScanner {
             }
 
             defer { self.readerIndex = self.array.endIndex }
-            return //String(decoding: self.array.suffix(from: readerIndex), as: Unicode.UTF8.self)
+            return
         }
     }
 }
