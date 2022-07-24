@@ -8,7 +8,7 @@
 import Foundation
 
 public struct JSONScanner {
-    var reader: DocumentReader
+    private var reader: DocumentReader
 
     public init(bytes: [UInt8]) {
         self.reader = DocumentReader(array: bytes)
@@ -21,8 +21,7 @@ public struct JSONScanner {
         return reader.array[startIndex..<reader.readerIndex]
     }
 
-    // MARK: Generic Value Parsing
-    mutating func consumeValue() throws {
+    private mutating func consumeValue() throws {
         var whitespace = 0
         while let byte = reader.peek(offset: whitespace) {
             switch byte {
@@ -57,8 +56,7 @@ public struct JSONScanner {
         throw JSONScannerError.unexpectedEndOfFile
     }
 
-    // MARK: - Object parsing -
-    mutating func consumeObject() throws /*-> [String: JSONValue]*/ {
+    private mutating func consumeObject() throws {
         precondition(self.reader.read() == .openObject)
 
         // parse first value or end immediately
@@ -102,8 +100,7 @@ public struct JSONScanner {
         }
     }
 
-    // MARK: - Parse Array -
-    mutating func consumeArray() throws {
+    private mutating func consumeArray() throws {
         precondition(self.reader.read() == .openArray)
 
         // parse first value or end immediately
@@ -148,23 +145,16 @@ public struct JSONScanner {
 }
 
 public enum JSONScannerError: Swift.Error, Equatable {
-    case cannotConvertInputDataToUTF8
     case unexpectedCharacter(ascii: UInt8, characterIndex: Int)
     case unexpectedEndOfFile
-    case tooManyNestedArraysOrDictionaries(characterIndex: Int)
     case invalidHexDigitSequence(String, index: Int)
     case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
     case unescapedControlCharacterInString(ascii: UInt8, index: Int)
-    case expectedLowSurrogateUTF8SequenceAfterHighSurrogate(in: String, index: Int)
-    case couldNotCreateUnicodeScalarFromUInt32(in: String, index: Int, unicodeScalarValue: UInt32)
-    case numberWithLeadingZero(index: Int)
-    case numberIsNotRepresentableInSwift(parsed: String)
-    case singleFragmentFoundButNotAllowed
 }
 
 extension JSONScanner {
 
-    struct DocumentReader {
+    private struct DocumentReader {
         let array: [UInt8]
 
         private(set) var readerIndex: Int = 0
@@ -175,10 +165,6 @@ extension JSONScanner {
 
         init(array: [UInt8]) {
             self.array = array
-        }
-
-        subscript(bounds: Range<Int>) -> ArraySlice<UInt8> {
-            self.array[bounds]
         }
 
         mutating func read() -> UInt8? {
@@ -254,6 +240,7 @@ extension JSONScanner {
 
             throw JSONScannerError.unexpectedEndOfFile
         }
+
         private mutating func consumeEscapeSequence() throws {
             precondition(self.read() == .backslash, "Expected to have an backslash first")
             guard let ascii = self.read() else {
@@ -302,20 +289,16 @@ extension JSONScanner {
 
         private static func isHexAscii(_ ascii: UInt8) -> Bool {
             switch ascii {
-            case 48 ... 57:
-                return true
-            case 65 ... 70:
-                // uppercase letters
-                return true
-            case 97 ... 102:
-                // lowercase letters
+            case 48 ... 57, // Digits
+                65 ... 70,  // Uppercase
+                97 ... 102: // Lowercase
                 return true
             default:
                 return false
             }
         }
 
-        mutating func consumeLiteral() throws /*-> Bool */ {
+        mutating func consumeLiteral() throws  {
             switch self.read() {
             case UInt8(ascii: "t"):
                 guard self.read() == UInt8(ascii: "r"),
@@ -325,7 +308,6 @@ extension JSONScanner {
                     guard !self.isEOF else {
                         throw JSONScannerError.unexpectedEndOfFile
                     }
-
                     throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
                 }
 
@@ -338,7 +320,6 @@ extension JSONScanner {
                     guard !self.isEOF else {
                         throw JSONScannerError.unexpectedEndOfFile
                     }
-
                     throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
                 }
 
@@ -350,7 +331,6 @@ extension JSONScanner {
                     guard !self.isEOF else {
                         throw JSONScannerError.unexpectedEndOfFile
                     }
-
                     throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
                 }
 
