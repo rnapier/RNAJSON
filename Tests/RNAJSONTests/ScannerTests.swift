@@ -60,8 +60,8 @@ final class ScannerTests: XCTestCase {
         }
         """#.utf8)
 
-        var scanner = JSONScanner(bytes: json)
-        let result = Array(try scanner.dataForPath([]))
+        let scanner = JSONScanner()
+        let result = Array(try scanner.extractData(from: json, forPath: []))
         XCTAssertEqual(result, expected)
     }
 
@@ -127,8 +127,8 @@ final class ScannerTests: XCTestCase {
         ,"rosebud"]
         """#.utf8)
 
-        var scanner = JSONScanner(bytes: json)
-        let result = Array(try scanner.dataForFirstValue())
+        let scanner = JSONScanner()
+        let result = Array(try scanner.extractData(from: json, forPath: []))
         XCTAssertEqual(result, json)
     }
 
@@ -140,9 +140,9 @@ final class ScannerTests: XCTestCase {
         let expected = Array(#"""
         2
         """#.utf8)
-        var scanner = JSONScanner(bytes: json)
+        let scanner = JSONScanner()
         let path: [JSONCodingKey] = [1]
-        let result = Array(try scanner.dataForPath(path))
+        let result = Array(try scanner.extractData(from: json, forPath: path))
 
         XCTAssertEqual(result, expected)
     }
@@ -173,9 +173,9 @@ final class ScannerTests: XCTestCase {
         let expected = Array(#"""
         "aerodactyl"
         """#.utf8)
-        var scanner = JSONScanner(bytes: json)
+        let scanner = JSONScanner()
         let path: [JSONCodingKey] = ["name"]
-        let result = Array(try scanner.dataForPath(path))
+        let result = Array(try scanner.extractData(from: json, forPath: path))
 
         XCTAssertEqual(result, expected)
     }
@@ -206,9 +206,43 @@ final class ScannerTests: XCTestCase {
         let expected = Array(#"""
         "https://pokeapi.co/api/v2/type/6/"
         """#.utf8)
-        var scanner = JSONScanner(bytes: json)
+        let scanner = JSONScanner()
         let path: [JSONCodingKey] = ["types", 0, "type", "url"]
-        let result = Array(try scanner.dataForPath(path))
+        let result = Array(try scanner.extractData(from: json, forPath: path))
         XCTAssertEqual(result, expected)
+    }
+
+    func testSecondaryDecoding() throws {
+        let jsonString = """
+            {
+            "groups": [
+              {
+                "id": "oruoiru",
+                "testProp": "rhorir",
+                "name": "* C-Level",
+                "description": "C-Level"
+              },
+              {
+                "id": "seese",
+                "testProp": "seses",
+                "name": "CDLevel",
+                "description": "CDLevel"
+              }
+            ],
+            "totalCount": 41
+            }
+            """
+
+        struct Group: Codable {
+            var id: String
+            var name: String
+        }
+
+        let scanner = JSONScanner()
+        let path: [JSONCodingKey] = ["groups", 1]
+        let groupJSON = try scanner.extractData(from: Array(jsonString.utf8), forPath: path)
+        let group = try JSONDecoder().decode(Group.self, from: Data(groupJSON))
+        XCTAssertEqual(group.id, "seese")
+
     }
 }

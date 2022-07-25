@@ -26,160 +26,21 @@ public struct JSONCodingKey: CodingKey, CustomStringConvertible, ExpressibleBySt
 // https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/JSONSerialization%2BParser.swift
 
 public struct JSONScanner {
-    private var reader: DocumentReader
+    public init() {}
 
-    public init(bytes: [UInt8]) {
-        self.reader = DocumentReader(array: bytes)
-    }
+    public func extractData(from data: [UInt8], forPath path: [CodingKey]) throws -> some Collection<UInt8> {
+        var reader = DocumentReader(array: data)
 
-    public mutating func dataForPath(_ path: [CodingKey]) throws -> some Collection<UInt8> {
         try reader.consumeWhitespace()
 
         for key in path {
-            if let index = key.intValue { try consumeArray(toIndex: index) }
-            else { try consumeObject(key: key.stringValue) }
+            if let index = key.intValue { try reader.consumeArray(toIndex: index) }
+            else { try reader.consumeObject(key: key.stringValue) }
         }
 
         let startIndex = reader.readerIndex
-        try consumeValue()
+        try reader.consumeValue()
         return reader.array[startIndex..<reader.readerIndex]
-    }
-
-    private mutating func consumeValue() throws {
-        while let byte = reader.peek() {
-            switch byte {
-            case .quote:
-                try reader.consumeString()
-                return
-
-            case .openObject:
-                try consumeObject()
-                return
-
-            case .openArray:
-                try consumeArray()
-                return
-
-            case UInt8(ascii: "f"), UInt8(ascii: "t"), UInt8(ascii: "n"):
-                try reader.consumeLiteral()
-                return
-
-            case UInt8(ascii: "-"), UInt8(ascii: "0") ... UInt8(ascii: "9"):
-                try reader.consumeNumber()
-                return
-
-            case .space, .return, .newline, .tab:
-                reader.moveReaderIndex(forwardBy: 1)
-
-            default:
-                throw JSONScannerError.unexpectedCharacter(ascii: byte, characterIndex: self.reader.readerIndex)
-            }
-        }
-
-        throw JSONScannerError.unexpectedEndOfFile
-    }
-
-    private mutating func consumeObject(key: String? = nil) throws {
-        precondition(self.reader.read() == .openObject)
-
-        // parse first value or end immediately
-        switch try reader.consumeWhitespace() {
-        case .space, .return, .newline, .tab:
-            preconditionFailure("Expected that all white space is consumed")
-        case .closeObject:
-            // if the first char after whitespace is a closing bracket, we found an empty array
-            self.reader.moveReaderIndex(forwardBy: 1)
-            return
-        default:
-            break
-        }
-
-        while true {
-            let thisKey = String(decoding: try reader.consumeString(), as: UTF8.self)
-            let colon = try reader.consumeWhitespace()
-            guard colon == .colon else {
-                throw JSONScannerError.unexpectedCharacter(ascii: colon, characterIndex: reader.readerIndex)
-            }
-            reader.moveReaderIndex(forwardBy: 1)
-            try reader.consumeWhitespace()
-
-            if thisKey == key { return }
-
-            try self.consumeValue()
-
-            let commaOrBrace = try reader.consumeWhitespace()
-            switch commaOrBrace {
-            case .closeObject:
-                reader.moveReaderIndex(forwardBy: 1)
-                if key != nil {
-                    throw JSONScannerError.keyNotFound(characterIndex: reader.readerIndex)
-                }
-                return
-
-            case .comma:
-                reader.moveReaderIndex(forwardBy: 1)
-                if try reader.consumeWhitespace() == .closeObject {
-                    // the foundation json implementation does support trailing commas
-                    reader.moveReaderIndex(forwardBy: 1)
-                    return
-                }
-                continue
-
-            default:
-                throw JSONScannerError.unexpectedCharacter(ascii: commaOrBrace, characterIndex: reader.readerIndex)
-            }
-        }
-    }
-
-    private mutating func consumeArray(toIndex: Int? = nil) throws {
-        guard self.reader.read() == .openArray else {
-            throw JSONScannerError.unexpectedType(characterIndex: reader.readerIndex)
-        }
-
-        // parse first value or end immediately
-        switch try reader.consumeWhitespace() {
-        case .space, .return, .newline, .tab:
-            preconditionFailure("Expected that all white space is consumed")
-        case .closeArray:
-            // if the first char after whitespace is a closing bracket, we found an empty array
-            self.reader.moveReaderIndex(forwardBy: 1)
-            return
-        default:
-            break
-        }
-
-        var index = 0
-
-        // parse values
-        while index < (toIndex ?? .max) {
-            try consumeValue()
-            index += 1
-
-            // consume the whitespace after the value before the comma
-            let ascii = try reader.consumeWhitespace()
-            switch ascii {
-            case .space, .return, .newline, .tab:
-                preconditionFailure("Expected that all white space is consumed")
-            case .closeArray:
-                reader.moveReaderIndex(forwardBy: 1)
-                if toIndex != nil {
-                    throw JSONScannerError.indexNotFound(characterIndex: reader.readerIndex)
-                }
-                return
-            case .comma:
-                // consume the comma
-                reader.moveReaderIndex(forwardBy: 1)
-                // consume the whitespace before the next value
-                if try reader.consumeWhitespace() == .closeArray {
-                    // the foundation json implementation does support trailing commas
-                    reader.moveReaderIndex(forwardBy: 1)
-                    return
-                }
-                continue
-            default:
-                throw JSONScannerError.unexpectedCharacter(ascii: ascii, characterIndex: reader.readerIndex)
-            }
-        }
     }
 }
 
@@ -202,6 +63,143 @@ extension JSONScanner {
 
         var isEOF: Bool {
             self.readerIndex >= self.array.endIndex
+        }
+
+        mutating func consumeValue() throws {
+            while let byte = peek() {
+                switch byte {
+                case .quote:
+                    try consumeString()
+                    return
+
+                case .openObject:
+                    try consumeObject()
+                    return
+
+                case .openArray:
+                    try consumeArray()
+                    return
+
+                case UInt8(ascii: "f"), UInt8(ascii: "t"), UInt8(ascii: "n"):
+                    try consumeLiteral()
+                    return
+
+                case UInt8(ascii: "-"), UInt8(ascii: "0") ... UInt8(ascii: "9"):
+                    try consumeNumber()
+                    return
+
+                case .space, .return, .newline, .tab:
+                    moveReaderIndex(forwardBy: 1)
+
+                default:
+                    throw JSONScannerError.unexpectedCharacter(ascii: byte, characterIndex: readerIndex)
+                }
+            }
+
+            throw JSONScannerError.unexpectedEndOfFile
+        }
+
+        mutating func consumeObject(key: String? = nil) throws {
+            precondition(read() == .openObject)
+
+            // parse first value or end immediately
+            switch try consumeWhitespace() {
+            case .space, .return, .newline, .tab:
+                preconditionFailure("Expected that all white space is consumed")
+            case .closeObject:
+                // if the first char after whitespace is a closing bracket, we found an empty array
+                moveReaderIndex(forwardBy: 1)
+                return
+            default:
+                break
+            }
+
+            while true {
+                let thisKey = String(decoding: try consumeString(), as: UTF8.self)
+                let colon = try consumeWhitespace()
+                guard colon == .colon else {
+                    throw JSONScannerError.unexpectedCharacter(ascii: colon, characterIndex: readerIndex)
+                }
+                moveReaderIndex(forwardBy: 1)
+                try consumeWhitespace()
+
+                if thisKey == key { return }
+
+                try self.consumeValue()
+
+                let commaOrBrace = try consumeWhitespace()
+                switch commaOrBrace {
+                case .closeObject:
+                    moveReaderIndex(forwardBy: 1)
+                    if key != nil {
+                        throw JSONScannerError.keyNotFound(characterIndex: readerIndex)
+                    }
+                    return
+
+                case .comma:
+                    moveReaderIndex(forwardBy: 1)
+                    if try consumeWhitespace() == .closeObject {
+                        // the foundation json implementation does support trailing commas
+                        moveReaderIndex(forwardBy: 1)
+                        return
+                    }
+                    continue
+
+                default:
+                    throw JSONScannerError.unexpectedCharacter(ascii: commaOrBrace, characterIndex: readerIndex)
+                }
+            }
+        }
+
+        mutating func consumeArray(toIndex: Int? = nil) throws {
+            guard read() == .openArray else {
+                throw JSONScannerError.unexpectedType(characterIndex: readerIndex)
+            }
+
+            // parse first value or end immediately
+            switch try consumeWhitespace() {
+            case .space, .return, .newline, .tab:
+                preconditionFailure("Expected that all white space is consumed")
+            case .closeArray:
+                // if the first char after whitespace is a closing bracket, we found an empty array
+                moveReaderIndex(forwardBy: 1)
+                return
+            default:
+                break
+            }
+
+            var index = 0
+
+            // parse values
+            while index < (toIndex ?? .max) {
+                try consumeValue()
+                index += 1
+
+                // consume the whitespace after the value before the comma
+                let ascii = try consumeWhitespace()
+                switch ascii {
+                case .space, .return, .newline, .tab:
+                    preconditionFailure("Expected that all white space is consumed")
+                case .closeArray:
+                    moveReaderIndex(forwardBy: 1)
+                    if toIndex != nil {
+                        throw JSONScannerError.indexNotFound(characterIndex: readerIndex)
+                    }
+                    return
+                case .comma:
+                    // consume the comma
+                    moveReaderIndex(forwardBy: 1)
+                    // consume the whitespace before the next value
+                    if try consumeWhitespace() == .closeArray {
+                        // the foundation json implementation does support trailing commas
+                        moveReaderIndex(forwardBy: 1)
+                        return
+                    }
+                    continue
+                default:
+                    throw JSONScannerError.unexpectedCharacter(ascii: ascii, characterIndex: readerIndex)
+                }
+            }
         }
 
         init(array: [UInt8]) {
