@@ -7,7 +7,7 @@
 
 import Foundation
 
-public struct JSONCodingKey: CodingKey, CustomStringConvertible, ExpressibleByStringLiteral,  ExpressibleByIntegerLiteral {
+public struct JSONCodingKey: CodingKey, CustomStringConvertible, ExpressibleByStringLiteral, ExpressibleByIntegerLiteral {
     public var description: String { stringValue }
 
     public let stringValue: String
@@ -45,11 +45,11 @@ public struct JSONScanner {
         return reader.array[startIndex..<reader.readerIndex]
     }
 
+    // Convenience to accept JSONCodingKey literals.
     public func extractData<Source>(from data: Source, forPath path: [JSONCodingKey]) throws -> Source.SubSequence
     where Source: Collection<UInt8>, Source.Index == Int {
         try extractData(from: data, forPath: path as [CodingKey])
     }
-
 }
 
 public enum JSONScannerError: Swift.Error, Equatable {
@@ -165,15 +165,13 @@ extension JSONScanner {
             }
 
             // parse first value or end immediately
-            switch try consumeWhitespace() {
-            case .space, .return, .newline, .tab:
-                preconditionFailure("Expected that all white space is consumed")
-            case .closeArray:
+            if try consumeWhitespace() == .closeArray {
                 // if the first char after whitespace is a closing bracket, we found an empty array
                 moveReaderIndex(forwardBy: 1)
+                if toIndex != nil {
+                    throw JSONScannerError.indexNotFound(characterIndex: readerIndex)
+                }
                 return
-            default:
-                break
             }
 
             var index = 0
@@ -186,8 +184,6 @@ extension JSONScanner {
                 // consume the whitespace after the value before the comma
                 let ascii = try consumeWhitespace()
                 switch ascii {
-                case .space, .return, .newline, .tab:
-                    preconditionFailure("Expected that all white space is consumed")
                 case .closeArray:
                     moveReaderIndex(forwardBy: 1)
                     if toIndex != nil {
