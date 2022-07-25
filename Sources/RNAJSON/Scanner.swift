@@ -22,36 +22,30 @@ public struct JSONScanner {
     }
 
     private mutating func consumeValue() throws {
-        var whitespace = 0
-        while let byte = reader.peek(offset: whitespace) {
+        while let byte = reader.peek() {
             switch byte {
             case .quote:
-                reader.moveReaderIndex(forwardBy: whitespace)
                 try reader.consumeString()
                 return
 
             case .openObject:
-                reader.moveReaderIndex(forwardBy: whitespace)
                 try consumeObject()
                 return
+                
             case .openArray:
-                reader.moveReaderIndex(forwardBy: whitespace)
                 try consumeArray()
                 return
 
             case UInt8(ascii: "f"), UInt8(ascii: "t"), UInt8(ascii: "n"):
-                reader.moveReaderIndex(forwardBy: whitespace)
                 try reader.consumeLiteral()
                 return
 
             case UInt8(ascii: "-"), UInt8(ascii: "0") ... UInt8(ascii: "9"):
-                reader.moveReaderIndex(forwardBy: whitespace)
                 try reader.consumeNumber()
                 return
 
             case .space, .return, .newline, .tab:
-                whitespace += 1
-                continue
+                reader.moveReaderIndex(forwardBy: 1)
 
             default:
                 throw JSONScannerError.unexpectedCharacter(ascii: byte, characterIndex: self.reader.readerIndex)
