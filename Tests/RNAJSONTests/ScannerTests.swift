@@ -61,7 +61,7 @@ final class ScannerTests: XCTestCase {
         """#.utf8)
 
         var scanner = JSONScanner(bytes: json)
-        let result = Array(try scanner.dataForBody())
+        let result = Array(try scanner.dataForFirstValue())
         XCTAssertEqual(result, expected)
     }
 
@@ -128,8 +128,22 @@ final class ScannerTests: XCTestCase {
         """#.utf8)
 
         var scanner = JSONScanner(bytes: json)
-        let result = Array(try scanner.dataForBody())
+        let result = Array(try scanner.dataForFirstValue())
         XCTAssertEqual(result, json)
+    }
 
+    func testArraySubscript() async throws {
+        let json = Array(#"""
+        [1, 2, 3]
+        """#.utf8)
+
+        let expected = Array(#"""
+        2
+        """#.utf8)
+        var scanner = JSONScanner(bytes: json)
+        let path: [JSONCodingKey] = [1]
+        let result = Array(try scanner.dataForPath(path))
+
+        XCTAssertEqual(result, expected)
     }
 }

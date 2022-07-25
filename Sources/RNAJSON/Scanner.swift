@@ -7,6 +7,21 @@
 
 import Foundation
 
+public struct JSONCodingKey: CodingKey, CustomStringConvertible, ExpressibleByStringLiteral,  ExpressibleByIntegerLiteral {
+    public var description: String { stringValue }
+
+    public let stringValue: String
+    public init(_ string: String) { self.stringValue = string }
+    public init?(stringValue: String) { self.init(stringValue) }
+    public var intValue: Int?
+    public init(intValue: Int) {
+        self.stringValue = "Index \(intValue)"
+        self.intValue = intValue
+    }
+    public init(stringLiteral value: String) { self.init(value) }
+    public init(integerLiteral value: Int) { self.init(intValue: value) }
+}
+
 public struct JSONScanner {
     private var reader: DocumentReader
 
@@ -14,11 +29,28 @@ public struct JSONScanner {
         self.reader = DocumentReader(array: bytes)
     }
 
-    public mutating func dataForBody() throws -> some Collection<UInt8> {
+    public mutating func dataForFirstValue() throws -> some Collection<UInt8> {
         try reader.consumeWhitespace()
         let startIndex = reader.readerIndex
         try consumeValue()
         return reader.array[startIndex..<reader.readerIndex]
+    }
+
+    public mutating func dataForPath(_ path: [CodingKey]) throws -> some Collection<UInt8> {
+        try reader.consumeWhitespace()
+
+        for key in path {
+            if let index = key.intValue {
+                try consumeArray(toIndex: index)
+            }
+        }
+
+        let startIndex = reader.readerIndex
+
+        try consumeValue()
+
+        return reader.array[startIndex..<reader.readerIndex]
+
     }
 
     private mutating func consumeValue() throws {
@@ -31,7 +63,7 @@ public struct JSONScanner {
             case .openObject:
                 try consumeObject()
                 return
-                
+
             case .openArray:
                 try consumeArray()
                 return
@@ -101,8 +133,10 @@ public struct JSONScanner {
         }
     }
 
-    private mutating func consumeArray() throws {
-        precondition(self.reader.read() == .openArray)
+    private mutating func consumeArray(toIndex: Int = .max) throws {
+        guard self.reader.read() == .openArray else {
+            throw JSONScannerError.unexpectedType(characterIndex: reader.readerIndex)
+        }
 
         // parse first value or end immediately
         switch try reader.consumeWhitespace() {
@@ -116,9 +150,12 @@ public struct JSONScanner {
             break
         }
 
+        var index = 0
+
         // parse values
-        while true {
+        while index < toIndex {
             try consumeValue()
+            index += 1
 
             // consume the whitespace after the value before the comma
             let ascii = try reader.consumeWhitespace()
@@ -127,6 +164,9 @@ public struct JSONScanner {
                 preconditionFailure("Expected that all white space is consumed")
             case .closeArray:
                 reader.moveReaderIndex(forwardBy: 1)
+                if toIndex != .max {
+                    throw JSONScannerError.indexNotFound(characterIndex: reader.readerIndex)
+                }
                 return
             case .comma:
                 // consume the comma
@@ -150,6 +190,8 @@ public enum JSONScannerError: Swift.Error, Equatable {
     case unexpectedEndOfFile
     case invalidHexDigitSequence(String, index: Int)
     case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
+    case indexNotFound(characterIndex: Int)
+    case unexpectedType(characterIndex: Int)
 }
 
 extension JSONScanner {
