@@ -28,7 +28,9 @@ public struct JSONCodingKey: CodingKey, CustomStringConvertible, ExpressibleBySt
 public struct JSONScanner {
     public init() {}
 
-    public func extractData(from data: [UInt8], forPath path: [CodingKey]) throws -> some Collection<UInt8> {
+    public func extractData<Source>(from data: Source, forPath path: [CodingKey]) throws -> Source.SubSequence
+    where Source: Collection<UInt8>, Source.Index == Int
+    {
         var reader = DocumentReader(array: data)
 
         try reader.consumeWhitespace()
@@ -42,6 +44,12 @@ public struct JSONScanner {
         try reader.consumeValue()
         return reader.array[startIndex..<reader.readerIndex]
     }
+
+    public func extractData<Source>(from data: Source, forPath path: [JSONCodingKey]) throws -> Source.SubSequence
+    where Source: Collection<UInt8>, Source.Index == Int {
+        try extractData(from: data, forPath: path as [CodingKey])
+    }
+
 }
 
 public enum JSONScannerError: Swift.Error, Equatable {
@@ -56,8 +64,8 @@ public enum JSONScannerError: Swift.Error, Equatable {
 
 extension JSONScanner {
 
-    private struct DocumentReader {
-        let array: [UInt8]
+    private struct DocumentReader<Source: Collection<UInt8>> where Source.Index == Int {
+        let array: Source
 
         private(set) var readerIndex: Int = 0
 
@@ -202,7 +210,7 @@ extension JSONScanner {
             }
         }
 
-        init(array: [UInt8]) {
+        init(array: Source) {
             self.array = array
         }
 

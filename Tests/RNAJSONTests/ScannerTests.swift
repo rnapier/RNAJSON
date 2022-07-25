@@ -141,8 +141,7 @@ final class ScannerTests: XCTestCase {
         2
         """#.utf8)
         let scanner = JSONScanner()
-        let path: [JSONCodingKey] = [1]
-        let result = Array(try scanner.extractData(from: json, forPath: path))
+        let result = Array(try scanner.extractData(from: json, forPath: [1]))
 
         XCTAssertEqual(result, expected)
     }
@@ -174,8 +173,7 @@ final class ScannerTests: XCTestCase {
         "aerodactyl"
         """#.utf8)
         let scanner = JSONScanner()
-        let path: [JSONCodingKey] = ["name"]
-        let result = Array(try scanner.extractData(from: json, forPath: path))
+        let result = Array(try scanner.extractData(from: json, forPath: ["name"]))
 
         XCTAssertEqual(result, expected)
     }
@@ -207,8 +205,7 @@ final class ScannerTests: XCTestCase {
         "https://pokeapi.co/api/v2/type/6/"
         """#.utf8)
         let scanner = JSONScanner()
-        let path: [JSONCodingKey] = ["types", 0, "type", "url"]
-        let result = Array(try scanner.extractData(from: json, forPath: path))
+        let result = Array(try scanner.extractData(from: json, forPath: ["types", 0, "type", "url"]))
         XCTAssertEqual(result, expected)
     }
 
@@ -239,9 +236,8 @@ final class ScannerTests: XCTestCase {
         }
 
         let scanner = JSONScanner()
-        let path: [JSONCodingKey] = ["groups", 1]
-        let groupJSON = try scanner.extractData(from: Array(jsonString.utf8), forPath: path)
-        let group = try JSONDecoder().decode(Group.self, from: Data(groupJSON))
+        let groupJSON = try scanner.extractData(from: Data(jsonString.utf8), forPath: ["groups", 1])
+        let group = try JSONDecoder().decode(Group.self, from: groupJSON)
         XCTAssertEqual(group.id, "seese")
 
     }
