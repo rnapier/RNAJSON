@@ -61,7 +61,7 @@ final class ScannerTests: XCTestCase {
         """#.utf8)
 
         var scanner = JSONScanner(bytes: json)
-        let result = Array(try scanner.dataForFirstValue())
+        let result = Array(try scanner.dataForPath([]))
         XCTAssertEqual(result, expected)
     }
 
@@ -144,6 +144,71 @@ final class ScannerTests: XCTestCase {
         let path: [JSONCodingKey] = [1]
         let result = Array(try scanner.dataForPath(path))
 
+        XCTAssertEqual(result, expected)
+    }
+
+    func testObjectKey() async throws {
+        let json = Array(#"""
+        {
+            "id": 142,
+            "name": "aerodactyl",
+            "types": [{
+                    "type": {
+                        "name": "rock",
+                        "url": "https://pokeapi.co/api/v2/type/6/"
+                    },
+                    "slot": 1
+                },
+                {
+                    "type": {
+                        "name": "flying",
+                        "url": "https://pokeapi.co/api/v2/type/3/"
+                    },
+                    "slot": 2
+                }
+            ]
+        }
+        """#.utf8)
+
+        let expected = Array(#"""
+        "aerodactyl"
+        """#.utf8)
+        var scanner = JSONScanner(bytes: json)
+        let path: [JSONCodingKey] = ["name"]
+        let result = Array(try scanner.dataForPath(path))
+
+        XCTAssertEqual(result, expected)
+    }
+
+    func testPath() async throws {
+        let json = Array(#"""
+        {
+            "id": 142,
+            "name": "aerodactyl",
+            "types": [{
+                    "type": {
+                        "name": "rock",
+                        "url": "https://pokeapi.co/api/v2/type/6/"
+                    },
+                    "slot": 1
+                },
+                {
+                    "type": {
+                        "name": "flying",
+                        "url": "https://pokeapi.co/api/v2/type/3/"
+                    },
+                    "slot": 2
+                }
+            ]
+        }
+        """#.utf8)
+
+        let expected = Array(#"""
+        "https://pokeapi.co/api/v2/type/6/"
+        """#.utf8)
+        var scanner = JSONScanner(bytes: json)
+        let path: [JSONCodingKey] = ["types", 0, "type", "url"]
+        let result = Array(try scanner.dataForPath(path))
         XCTAssertEqual(result, expected)
     }
 }

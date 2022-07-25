@@ -22,6 +22,9 @@ public struct JSONCodingKey: CodingKey, CustomStringConvertible, ExpressibleBySt
     public init(integerLiteral value: Int) { self.init(intValue: value) }
 }
 
+// Stripped down version of stdlib.
+// https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/JSONSerialization%2BParser.swift
+
 public struct JSONScanner {
     private var reader: DocumentReader
 
@@ -29,28 +32,17 @@ public struct JSONScanner {
         self.reader = DocumentReader(array: bytes)
     }
 
-    public mutating func dataForFirstValue() throws -> some Collection<UInt8> {
-        try reader.consumeWhitespace()
-        let startIndex = reader.readerIndex
-        try consumeValue()
-        return reader.array[startIndex..<reader.readerIndex]
-    }
-
     public mutating func dataForPath(_ path: [CodingKey]) throws -> some Collection<UInt8> {
         try reader.consumeWhitespace()
 
         for key in path {
-            if let index = key.intValue {
-                try consumeArray(toIndex: index)
-            }
+            if let index = key.intValue { try consumeArray(toIndex: index) }
+            else { try consumeObject(key: key.stringValue) }
         }
 
         let startIndex = reader.readerIndex
-
         try consumeValue()
-
         return reader.array[startIndex..<reader.readerIndex]
-
     }
 
     private mutating func consumeValue() throws {
@@ -87,7 +79,7 @@ public struct JSONScanner {
         throw JSONScannerError.unexpectedEndOfFile
     }
 
-    private mutating func consumeObject() throws {
+    private mutating func consumeObject(key: String? = nil) throws {
         precondition(self.reader.read() == .openObject)
 
         // parse first value or end immediately
@@ -103,19 +95,25 @@ public struct JSONScanner {
         }
 
         while true {
-            try reader.consumeString()  // Key
+            let thisKey = String(decoding: try reader.consumeString(), as: UTF8.self)
             let colon = try reader.consumeWhitespace()
             guard colon == .colon else {
                 throw JSONScannerError.unexpectedCharacter(ascii: colon, characterIndex: reader.readerIndex)
             }
             reader.moveReaderIndex(forwardBy: 1)
             try reader.consumeWhitespace()
+
+            if thisKey == key { return }
+
             try self.consumeValue()
 
             let commaOrBrace = try reader.consumeWhitespace()
             switch commaOrBrace {
             case .closeObject:
                 reader.moveReaderIndex(forwardBy: 1)
+                if key != nil {
+                    throw JSONScannerError.keyNotFound(characterIndex: reader.readerIndex)
+                }
                 return
 
             case .comma:
@@ -133,7 +131,7 @@ public struct JSONScanner {
         }
     }
 
-    private mutating func consumeArray(toIndex: Int = .max) throws {
+    private mutating func consumeArray(toIndex: Int? = nil) throws {
         guard self.reader.read() == .openArray else {
             throw JSONScannerError.unexpectedType(characterIndex: reader.readerIndex)
         }
@@ -153,7 +151,7 @@ public struct JSONScanner {
         var index = 0
 
         // parse values
-        while index < toIndex {
+        while index < (toIndex ?? .max) {
             try consumeValue()
             index += 1
 
@@ -164,7 +162,7 @@ public struct JSONScanner {
                 preconditionFailure("Expected that all white space is consumed")
             case .closeArray:
                 reader.moveReaderIndex(forwardBy: 1)
-                if toIndex != .max {
+                if toIndex != nil {
                     throw JSONScannerError.indexNotFound(characterIndex: reader.readerIndex)
                 }
                 return
@@ -192,6 +190,7 @@ public enum JSONScannerError: Swift.Error, Equatable {
     case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
     case indexNotFound(characterIndex: Int)
     case unexpectedType(characterIndex: Int)
+    case keyNotFound(characterIndex: Int)
 }
 
 extension JSONScanner {
@@ -249,15 +248,18 @@ extension JSONScanner {
             throw JSONScannerError.unexpectedEndOfFile
         }
 
-        mutating func consumeString() throws  {
+        @discardableResult
+        mutating func consumeString() throws -> some Collection<UInt8> {
             guard self.read() == .quote else {
                 throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
             }
 
+            let startIndex = readerIndex
+
             while let byte = read() {
                 switch byte {
                 case UInt8(ascii: "\""):
-                    return
+                    return array[startIndex ..< (readerIndex-1)]
 
                 case UInt8(ascii: "\\"):
                     try consumeEscapedSequence()
@@ -334,17 +336,10 @@ extension JSONScanner {
             }
 
             switch self.read() {
-            case UInt8(ascii: "t"):
-                try consume(remainder: "rue")
-
-            case UInt8(ascii: "f"):
-                try consume(remainder: "alse")
-
-            case UInt8(ascii: "n"):
-                try consume(remainder: "ull")
-
-            default:
-                preconditionFailure("Expected to have `t`, `f`, or `n` as first character")
+            case UInt8(ascii: "t"): try consume(remainder: "rue")
+            case UInt8(ascii: "f"): try consume(remainder: "alse")
+            case UInt8(ascii: "n"): try consume(remainder: "ull")
+            default: preconditionFailure("Expected to have `t`, `f`, or `n` as first character")
             }
         }
 
@@ -362,6 +357,7 @@ extension JSONScanner {
                 case .space, .return, .newline, .tab, .comma, .closeArray, .closeObject:
                     self.moveReaderIndex(forwardBy: numberchars)
                     return
+                    
                 default:
                     throw JSONScannerError.unexpectedCharacter(ascii: byte, characterIndex: readerIndex + numberchars)
                 }
