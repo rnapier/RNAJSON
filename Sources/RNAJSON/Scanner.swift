@@ -25,10 +25,11 @@ public struct JSONScanner {
         var whitespace = 0
         while let byte = reader.peek(offset: whitespace) {
             switch byte {
-            case UInt8(ascii: "\""):
+            case .quote:
                 reader.moveReaderIndex(forwardBy: whitespace)
                 try reader.consumeString()
                 return
+
             case .openObject:
                 reader.moveReaderIndex(forwardBy: whitespace)
                 try consumeObject()
@@ -37,17 +38,21 @@ public struct JSONScanner {
                 reader.moveReaderIndex(forwardBy: whitespace)
                 try consumeArray()
                 return
+
             case UInt8(ascii: "f"), UInt8(ascii: "t"), UInt8(ascii: "n"):
                 reader.moveReaderIndex(forwardBy: whitespace)
                 try reader.consumeLiteral()
                 return
+
             case UInt8(ascii: "-"), UInt8(ascii: "0") ... UInt8(ascii: "9"):
                 reader.moveReaderIndex(forwardBy: whitespace)
                 try reader.consumeNumber()
                 return
+
             case .space, .return, .newline, .tab:
                 whitespace += 1
                 continue
+
             default:
                 throw JSONScannerError.unexpectedCharacter(ascii: byte, characterIndex: self.reader.readerIndex)
             }
@@ -86,6 +91,7 @@ public struct JSONScanner {
             case .closeObject:
                 reader.moveReaderIndex(forwardBy: 1)
                 return
+
             case .comma:
                 reader.moveReaderIndex(forwardBy: 1)
                 if try reader.consumeWhitespace() == .closeObject {
@@ -94,6 +100,7 @@ public struct JSONScanner {
                     return
                 }
                 continue
+
             default:
                 throw JSONScannerError.unexpectedCharacter(ascii: commaOrBrace, characterIndex: reader.readerIndex)
             }
@@ -211,38 +218,23 @@ extension JSONScanner {
             guard self.read() == .quote else {
                 throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
             }
-            var copy = 0
 
-            while let byte = peek(offset: copy) {
+            while let byte = read() {
                 switch byte {
                 case UInt8(ascii: "\""):
-                    self.moveReaderIndex(forwardBy: copy + 1)
                     return
 
-                case 0 ... 31:
-                    // All Unicode characters may be placed within the
-                    // quotation marks, except for the characters that must be escaped:
-                    // quotation mark, reverse solidus, and the control characters (U+0000
-                    // through U+001F).
-                    let errorIndex = self.readerIndex + copy
-                    throw JSONScannerError.unescapedControlCharacterInString(ascii: byte, index: errorIndex)
-
                 case UInt8(ascii: "\\"):
-                    self.moveReaderIndex(forwardBy: copy)
-                    try consumeEscapeSequence()
-                    copy = 0
+                    try consumeEscapedSequence()
 
                 default:
-                    copy += 1
                     continue
                 }
             }
-
             throw JSONScannerError.unexpectedEndOfFile
         }
 
-        private mutating func consumeEscapeSequence() throws {
-            precondition(self.read() == .backslash, "Expected to have an backslash first")
+        private mutating func consumeEscapedSequence() throws {
             guard let ascii = self.read() else {
                 throw JSONScannerError.unexpectedEndOfFile
             }
