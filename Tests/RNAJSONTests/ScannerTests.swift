@@ -239,6 +239,5 @@ final class ScannerTests: XCTestCase {
         let groupJSON = try scanner.extractData(from: Data(jsonString.utf8), forPath: ["groups", 1])
         let group = try JSONDecoder().decode(Group.self, from: groupJSON)
         XCTAssertEqual(group.id, "seese")
-
     }
 }
