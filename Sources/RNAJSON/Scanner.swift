@@ -156,7 +156,6 @@ public enum JSONScannerError: Swift.Error, Equatable {
     case unexpectedEndOfFile
     case invalidHexDigitSequence(String, index: Int)
     case unexpectedEscapedCharacter(ascii: UInt8, index: Int)
-    case unescapedControlCharacterInString(ascii: UInt8, index: Int)
 }
 
 extension JSONScanner {
@@ -251,15 +250,12 @@ extension JSONScanner {
                 return
             case 0x75: // \u
                 try consumeUnicodeHexSequence()
-                return
             default:
                 throw JSONScannerError.unexpectedEscapedCharacter(ascii: ascii, index: self.readerIndex - 1)
             }
         }
 
         private mutating func consumeUnicodeHexSequence() throws {
-            // As stated in RFC-8259 an escaped unicode character is 4 HEXDIGITs long
-            // https://tools.ietf.org/html/rfc8259#section-7
             let startIndex = self.readerIndex
             guard let firstHex = self.read(),
                   let secondHex = self.read(),
@@ -269,17 +265,17 @@ extension JSONScanner {
                 throw JSONScannerError.unexpectedEndOfFile
             }
 
-            guard DocumentReader.isHexAscii(firstHex),
-                  DocumentReader.isHexAscii(secondHex),
-                  DocumentReader.isHexAscii(thirdHex),
-                  DocumentReader.isHexAscii(forthHex)
+            guard isHexAscii(firstHex),
+                  isHexAscii(secondHex),
+                  isHexAscii(thirdHex),
+                  isHexAscii(forthHex)
             else {
                 let hexString = String(decoding: [firstHex, secondHex, thirdHex, forthHex], as: Unicode.UTF8.self)
                 throw JSONScannerError.invalidHexDigitSequence(hexString, index: startIndex)
             }
         }
 
-        private static func isHexAscii(_ ascii: UInt8) -> Bool {
+        private func isHexAscii(_ ascii: UInt8) -> Bool {
             switch ascii {
             case 48 ... 57, // Digits
                 65 ... 70,  // Uppercase
@@ -291,67 +287,37 @@ extension JSONScanner {
         }
 
         mutating func consumeLiteral() throws  {
+            func consume(remainder: String) throws {
+                for byte in remainder.utf8 {
+                    guard self.read() == byte else {
+                        throw isEOF ? JSONScannerError.unexpectedEndOfFile :
+                        JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!,
+                                                             characterIndex: self.readerIndex - 1)
+                    }
+                }
+            }
+
             switch self.read() {
             case UInt8(ascii: "t"):
-                guard self.read() == UInt8(ascii: "r"),
-                      self.read() == UInt8(ascii: "u"),
-                      self.read() == UInt8(ascii: "e")
-                else {
-                    guard !self.isEOF else {
-                        throw JSONScannerError.unexpectedEndOfFile
-                    }
-                    throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
-                }
+                try consume(remainder: "rue")
 
             case UInt8(ascii: "f"):
-                guard self.read() == UInt8(ascii: "a"),
-                      self.read() == UInt8(ascii: "l"),
-                      self.read() == UInt8(ascii: "s"),
-                      self.read() == UInt8(ascii: "e")
-                else {
-                    guard !self.isEOF else {
-                        throw JSONScannerError.unexpectedEndOfFile
-                    }
-                    throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
-                }
+                try consume(remainder: "alse")
 
             case UInt8(ascii: "n"):
-                guard self.read() == UInt8(ascii: "u"),
-                      self.read() == UInt8(ascii: "l"),
-                      self.read() == UInt8(ascii: "l")
-                else {
-                    guard !self.isEOF else {
-                        throw JSONScannerError.unexpectedEndOfFile
-                    }
-                    throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.readerIndex - 1)
-                }
+                try consume(remainder: "ull")
 
             default:
-                preconditionFailure("Expected to have `t` or `f` as first character")
+                preconditionFailure("Expected to have `t`, `f`, or `n` as first character")
             }
         }
 
         mutating func consumeNumber() throws {
-            // parse first character
-            guard let ascii = self.peek() else {
-                preconditionFailure("Why was this function called, if there is no 0...9 or -")
-            }
-            switch ascii {
-            case UInt8(ascii: "0"),
-                UInt8(ascii: "1") ... UInt8(ascii: "9"),
-                UInt8(ascii: "-"): break
+            var numberchars = 0
 
-            default:
-                preconditionFailure("Why was this function called, if there is no 0...9 or -")
-            }
-
-            var numberchars = 1
-
-            // parse everything else
             while let byte = self.peek(offset: numberchars) {
                 switch byte {
-                case UInt8(ascii: "0"),
-                    UInt8(ascii: "1") ... UInt8(ascii: "9"),
+                case UInt8(ascii: "0") ... UInt8(ascii: "9"),
                     UInt8(ascii: "."),
                     UInt8(ascii: "e"), UInt8(ascii: "E"),
                     UInt8(ascii: "+"), UInt8(ascii: "-"):
