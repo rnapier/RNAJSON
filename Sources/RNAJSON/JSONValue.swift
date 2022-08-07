@@ -228,11 +228,14 @@ extension JSONValue {
     }
 }
 
-// Tuples (JSONKeyValues) can't directly conform to Equatable, so do this by hand
-// Note that this is strict equality. Key order and duplication must be identical for objects.
-// Use `.normalized()` to sort keys and remove duplicates for "equivalent" comparison.
+// Tuples (JSONKeyValues) can't directly conform to Equatable, so do this by hand.
+// Note that this is normalized equality. Use `===` for strict equality.
 extension JSONValue: Equatable {
     public static func == (lhs: JSONValue, rhs: JSONValue) -> Bool {
+        lhs.normalized() === rhs.normalized()
+    }
+
+    public static func === (lhs: JSONValue, rhs: JSONValue) -> Bool {
         switch (lhs, rhs) {
         case (.string(let lhs), .string(let rhs)): return lhs == rhs
         case (.number(digits: let lhs), .number(digits: let rhs)): return lhs == rhs
