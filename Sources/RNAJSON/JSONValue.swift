@@ -13,26 +13,6 @@ public enum JSONValue {
     public init(_ convertible: JSONConvertible) throws { self = try convertible.jsonValue() }
 }
 
-//extension JSONValue {
-//    public var isValue: Bool {
-//        switch self {
-//        case .array, .object:
-//            return false
-//        case .null, .number, .string, .bool:
-//            return true
-//        }
-//    }
-//
-//    public var isContainer: Bool {
-//        switch self {
-//        case .array, .object:
-//            return true
-//        case .null, .number, .string, .bool:
-//            return false
-//        }
-//    }
-//}
-
 extension JSONValue {
     // Sorts all nested objects by key and removes duplicate keys (keeping last value).
     public func normalized() -> JSONValue {
@@ -406,33 +386,66 @@ extension JSONValue: CustomStringConvertible {
     }
 }
 
+private extension Decoder {
+    func decodeIfMatching(_ f: (Decoder) throws -> JSONValue) throws -> JSONValue? {
+        do { return try f(self) }
+        catch DecodingError.typeMismatch { return nil }
+    }
+
+    func decodeIfMatchingSingle(_ f: (SingleValueDecodingContainer) throws -> JSONValue) throws -> JSONValue? {
+        try decodeIfMatching { try f($0.singleValueContainer()) }
+    }
+}
+
+private func decodeString(container: SingleValueDecodingContainer) throws -> JSONValue {
+    .string(try container.decode(String.self))
+}
+
+private func decodeBool(container: SingleValueDecodingContainer) throws -> JSONValue {
+    .bool(try container.decode(Bool.self))
+}
+
+private func decodeNumber(container: SingleValueDecodingContainer) throws -> JSONValue {
+    let number = try container.decode(Decimal.self)
+    return .number(digits: "\(number)")
+}
+
+private func decodeObject(decoder: Decoder) throws -> JSONValue {
+    let object = try decoder.container(keyedBy: StringKey.self)
+    let pairs = try object.allKeys.map(\.stringValue).map { key in
+        (key, try object.decode(JSONValue.self, forKey: StringKey(key)))
+    }
+    return .object(keyValues: pairs)
+}
+
+private func decodeArray(decoder: Decoder) throws -> JSONValue {
+    var array = try decoder.unkeyedContainer()
+    var result: [JSONValue] = []
+    if let count = array.count { result.reserveCapacity(count) }
+    while !array.isAtEnd { result.append(try array.decode(JSONValue.self)) }
+    return .array(result)
+}
+
+private func decodeNil(decoder: Decoder) throws -> JSONValue {
+    if try decoder.singleValueContainer().decodeNil() { return .null }
+    else { throw DecodingError.typeMismatch(JSONValue.self,
+                                            .init(codingPath: decoder.codingPath,
+                                                  debugDescription: "Did not find nil")) }
+}
 extension JSONValue: Decodable {
     public init(from decoder: Decoder) throws {
-        if let string = try? decoder.singleValueContainer().decode(String.self) { self = .string(string) }
-
-        else if let number = try? decoder.singleValueContainer().decode(Decimal.self) { self = .number(digits: "\(number)") }
-
-        else if let bool = try? decoder.singleValueContainer().decode(Bool.self) { self = .bool(bool) }
-
-        else if let object = try? decoder.container(keyedBy: StringKey.self) {
-            let pairs = try object.allKeys.map(\.stringValue).map { key in
-                (key, try object.decode(JSONValue.self, forKey: StringKey(key)))
-            }
-            self = .object(keyValues: pairs)
-        }
-
-        else if var array = try? decoder.unkeyedContainer() {
-            var result: [JSONValue] = []
-            while !array.isAtEnd {
-                result.append(try array.decode(JSONValue.self))
-            }
-            self = .array(result)
-        }
-
-        else if let isNull = try? decoder.singleValueContainer().decodeNil(), isNull { self = .null }
-
-        else { throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath,
-                                                                       debugDescription: "Unknown JSON type")) }
+        self = try
+        decoder.decodeIfMatchingSingle(decodeString) ??
+        decoder.decodeIfMatchingSingle(decodeNumber) ??
+        decoder.decodeIfMatchingSingle(decodeBool) ??
+        decoder.decodeIfMatching(decodeObject) ??
+        decoder.decodeIfMatching(decodeArray) ??
+        decoder.decodeIfMatching(decodeNil) ??
+        {
+            throw DecodingError.typeMismatch(JSONValue.self,
+                .init(codingPath: decoder.codingPath,
+                      debugDescription: "Unknown JSON type"))
+        }()
     }
 }
 
