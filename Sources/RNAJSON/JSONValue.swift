@@ -431,7 +431,7 @@ extension JSONValue: Decodable {
 
         else if let isNull = try? decoder.singleValueContainer().decodeNil(), isNull { self = .null }
 
-        else { throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: [],
+        else { throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath,
                                                                        debugDescription: "Unknown JSON type")) }
     }
 }
