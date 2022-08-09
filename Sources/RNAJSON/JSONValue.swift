@@ -13,11 +13,11 @@ public struct DynamicJSONValue {
     }
 
     public subscript(_ key: String) -> Self {
-        DynamicJSONValue(_jsonValue[key] ?? .null)
+        DynamicJSONValue((try? _jsonValue[key]) ?? .null)
     }
 
     public subscript(_ index: Int) -> Self {
-        DynamicJSONValue(_jsonValue[index] ?? .null)
+        DynamicJSONValue((try? _jsonValue[index]) ?? .null)
     }
 }
 
@@ -200,8 +200,10 @@ extension JSONValue {
     }
 
     public func value(for key: String) throws -> JSONValue {
-        guard let value = self[key] else { throw JSONError.missingValue }
-        return value
+        guard case let .object(object) = self else { throw JSONError.typeMismatch }
+        guard let result = object.first(where: { $0.key == key })?.value else { throw JSONError.missingValue }
+        return result
+
     }
 
     public func values(for key: String) throws -> [JSONValue] {
@@ -209,9 +211,8 @@ extension JSONValue {
         return object.filter({ $0.key == key }).map(\.value)
     }
 
-    public subscript(_ key: String) -> JSONValue? {
-        guard case let .object(object) = self else { return nil }
-        return object.first(where: { $0.key == key })?.value
+    public subscript(_ key: String) -> JSONValue {
+        get throws { try value(for: key) }
     }
 }
 
@@ -241,8 +242,8 @@ extension JSONValue {
         return array[index]
     }
 
-    public subscript(_ index: Int) -> JSONValue? {
-        try? value(at: index)
+    public subscript(_ index: Int) -> JSONValue {
+        get throws { try value(at: index) }
     }
 }
 
