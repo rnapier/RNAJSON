@@ -36,7 +36,9 @@ public enum JSONValue {
     case object(keyValues: JSONKeyValues)
     case array(JSONArray)
     case null
+}
 
+extension JSONValue {
     public init(_ convertible: LosslessJSONConvertible) { self = convertible.jsonValue() }
     public init(_ convertible: JSONConvertible) throws { self = try convertible.jsonValue() }
 }
@@ -473,6 +475,35 @@ extension JSONValue: Decodable {
                 .init(codingPath: decoder.codingPath,
                       debugDescription: "Unknown JSON type"))
         }()
+    }
+}
+
+extension JSONValue: Encodable {
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .string(let string):
+            var container = encoder.singleValueContainer()
+            try container.encode(string)
+        case .number:
+            var container = encoder.singleValueContainer()
+            try container.encode(try self.decimalValue())
+        case .bool(let value):
+            var container = encoder.singleValueContainer()
+            try container.encode(value)
+        case .object(keyValues: let keyValues):
+            var container = encoder.container(keyedBy: StringKey.self)
+            for (key, value) in keyValues {
+                try container.encode(value, forKey: StringKey(key))
+            }
+        case .array(let values):
+            var container = encoder.unkeyedContainer()
+            for value in values {
+                try container.encode(value)
+            }
+        case .null:
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
+        }
     }
 }
 
