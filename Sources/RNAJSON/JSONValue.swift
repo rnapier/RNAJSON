@@ -438,12 +438,12 @@ private func decodeNil(decoder: Decoder) throws -> JSONValue {
 extension JSONValue: Decodable {
     public init(from decoder: Decoder) throws {
         self = try
+        decoder.decodeIfMatching(decodeNil) ??
         decoder.decodeIfMatchingSingle(decodeString) ??
         decoder.decodeIfMatchingSingle(decodeNumber) ??
         decoder.decodeIfMatchingSingle(decodeBool) ??
         decoder.decodeIfMatching(decodeObject) ??
         decoder.decodeIfMatching(decodeArray) ??
-        decoder.decodeIfMatching(decodeNil) ??
         {
             throw DecodingError.typeMismatch(JSONValue.self,
                 .init(codingPath: decoder.codingPath,
