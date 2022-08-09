@@ -1,6 +1,34 @@
 import Foundation
 
+// Returns value or null
 @dynamicMemberLookup
+public struct DynamicJSONValue {
+    public var _jsonValue: JSONValue
+    public init(_ jsonValue: JSONValue) {
+        _jsonValue = jsonValue
+    }
+
+    public subscript(dynamicMember key: String) -> Self {
+        self[key]
+    }
+
+    public subscript(_ key: String) -> Self {
+        DynamicJSONValue(_jsonValue[key] ?? .null)
+    }
+
+    public subscript(_ index: Int) -> Self {
+        DynamicJSONValue(_jsonValue[index] ?? .null)
+    }
+}
+
+extension DynamicJSONValue: CustomStringConvertible {
+    public var description: String { _jsonValue.description }
+}
+
+extension JSONValue {
+    public var dynamic: DynamicJSONValue { DynamicJSONValue(self) }
+}
+
 public enum JSONValue {
     case string(String)
     case number(digits: String)
@@ -183,10 +211,6 @@ extension JSONValue {
         guard case let .object(object) = self else { return nil }
         return object.first(where: { $0.key == key })?.value
     }
-
-    public subscript(dynamicMember key: String) -> JSONValue {
-        self[key] ?? .null
-    }
 }
 
 // Array
@@ -215,8 +239,8 @@ extension JSONValue {
         return array[index]
     }
 
-    public subscript(_ index: Int) -> JSONValue {
-        (try? value(at: index)) ?? .null
+    public subscript(_ index: Int) -> JSONValue? {
+        try? value(at: index)
     }
 }
 
