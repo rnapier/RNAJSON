@@ -48,3 +48,21 @@ extension JSONValue: Hashable {
         }
     }
 }
+
+extension JSONValue {
+    // Sorts all nested objects by key and removes duplicate keys (keeping last value).
+    public func normalized() -> JSONValue {
+        switch self {
+        case .object(keyValues: let keyValues):
+            return .object(keyValues:
+                            Dictionary(keyValues, uniquingKeysWith: { _, last in last })
+                .map { (key: $0, value: $1.normalized()) }
+                .sorted(by: { $0.key < $1.key }))
+
+        case .array(let values):
+            return .array(values.map { $0.normalized() })
+
+        default: return self
+        }
+    }
+}

@@ -15,24 +15,6 @@ public enum JSONValueError: Error {
     case missingValue
 }
 
-extension JSONValue {
-    // Sorts all nested objects by key and removes duplicate keys (keeping last value).
-    public func normalized() -> JSONValue {
-        switch self {
-        case .object(keyValues: let keyValues):
-            return .object(keyValues:
-                            Dictionary(keyValues, uniquingKeysWith: { _, last in last })
-                .map { (key: $0, value: $1.normalized()) }
-                .sorted(by: { $0.key < $1.key }))
-
-        case .array(let values):
-            return .array(values.map { $0.normalized() })
-
-        default: return self
-        }
-    }
-}
-
 // String
 extension JSONValue {
     public func stringValue() throws -> String {
@@ -43,6 +25,11 @@ extension JSONValue {
 
 // Number
 extension JSONValue {
+    // Convenience constructor from digits.
+    public static func digits(_ digits: String) -> Self {
+        .number(digits: digits)
+    }
+
     public func doubleValue() throws -> Double {
         guard let value = Double(try digits()) else { throw JSONValueError.typeMismatch }
         return value
@@ -62,10 +49,6 @@ extension JSONValue {
         guard case let .number(digits) = self else { throw JSONValueError.typeMismatch }
         return digits
     }
-
-    public static func digits(_ digits: String) -> Self {
-        .number(digits: digits)
-    }
 }
 
 // Bool
@@ -82,6 +65,7 @@ public typealias JSONKeyValues = [(key: String, value: JSONValue)]
 
 extension JSONKeyValues {
     public var keys: [String] { self.map(\.key) }
+    public var values: [JSONValue] { self.map(\.value) }
 
     // Treats KeyValues like a Dictionary. Operates only on first occurrence of key.
     // Using first occurrence is faster here. Compare, however, to `dictionaryValue()`
@@ -111,8 +95,9 @@ extension JSONValue {
     }
 
     // Uniques keys using last value by default. This allows overrides.
-    public func dictionaryValue(uniquingKeysWith: (JSONValue, JSONValue) -> JSONValue = { _, last in last }) throws -> [String: JSONValue] {
-        return Dictionary(try keyValues(), uniquingKeysWith: uniquingKeysWith)
+    public func dictionaryValue(uniquingKeysWith: (JSONValue, JSONValue) -> JSONValue = { _, last in last })
+    throws -> [String: JSONValue] {
+        Dictionary(try keyValues(), uniquingKeysWith: uniquingKeysWith)
     }
 
     // Returns first value matching key.
@@ -124,7 +109,7 @@ extension JSONValue {
     }
 
     public func values(for key: String) throws -> [JSONValue] {
-        return try keyValues().filter({ $0.key == key }).map(\.value)
+        try keyValues().filter({ $0.key == key }).map(\.value)
     }
 
     public subscript(_ key: String) -> JSONValue {
