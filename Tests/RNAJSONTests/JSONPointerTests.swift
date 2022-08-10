@@ -39,28 +39,28 @@ final class JSONPointerTests: XCTestCase {
 
         let expected = try JSONDecoder().decode(JSONValue.self, from: Data(aerodactyl))
 
-        try XCTAssertDeepEquivalent(result, expected)
+        XCTAssertEqual(result, expected)
     }    
 }
 
-private extension XCTest {
-    // Does not check key order
-    func XCTAssertDeepEquivalent(_ lhs: JSONValue, _ rhs: JSONValue) throws {
-        switch (lhs, rhs) {
-        case (.array(let lhs), .array(let rhs)):
-            XCTAssertEqual(lhs.count, rhs.count)
-            for (l, r) in zip(lhs, rhs) {
-                try XCTAssertDeepEquivalent(l, r)
-            }
-
-        case (.object(let lhs), .object(let rhs)):
-            XCTAssertEqual(lhs.count, rhs.count)
-            for key in lhs.keys {
-                try XCTAssertDeepEquivalent(XCTUnwrap(lhs[key]), XCTUnwrap(rhs[key]))
-            }
-
-        default:
-            XCTAssertEqual(lhs, rhs)
-        }
-    }
-}
+//private extension XCTest {
+//    // Does not check key order
+//    func XCTAssertDeepEquivalent(_ lhs: JSONValue, _ rhs: JSONValue) throws {
+//        switch (lhs, rhs) {
+//        case (.array(let lhs), .array(let rhs)):
+//            XCTAssertEqual(lhs.count, rhs.count)
+//            for (l, r) in zip(lhs, rhs) {
+//                try XCTAssertDeepEquivalent(l, r)
+//            }
+//
+//        case (.object(let lhs), .object(let rhs)):
+//            XCTAssertEqual(lhs.count, rhs.count)
+//            for key in lhs.keys {
+//                try XCTAssertDeepEquivalent(XCTUnwrap(lhs[key]), XCTUnwrap(rhs[key]))
+//            }
+//
+//        default:
+//            XCTAssertEqual(lhs, rhs)
+//        }
+//    }
+//}
