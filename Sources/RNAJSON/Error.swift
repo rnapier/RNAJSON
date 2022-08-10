@@ -23,8 +23,4 @@ public enum JSONError: Swift.Error, Hashable {
     case missingExponent(Location)
     case corruptedLiteral(expected: String, Location)
     case tooManySigns(Location)
-
-    // Split these; they're for JSON
-    case typeMismatch
-    case missingValue
 }

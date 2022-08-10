@@ -1,34 +1,5 @@
 import Foundation
 
-// Returns value or null
-@dynamicMemberLookup
-public struct DynamicJSONValue {
-    public var _jsonValue: JSONValue
-    public init(_ jsonValue: JSONValue) {
-        _jsonValue = jsonValue
-    }
-
-    public subscript(dynamicMember key: String) -> Self {
-        self[key]
-    }
-
-    public subscript(_ key: String) -> Self {
-        DynamicJSONValue((try? _jsonValue[key]) ?? .null)
-    }
-
-    public subscript(_ index: Int) -> Self {
-        DynamicJSONValue((try? _jsonValue[index]) ?? .null)
-    }
-}
-
-extension DynamicJSONValue: CustomStringConvertible {
-    public var description: String { _jsonValue.description }
-}
-
-extension JSONValue {
-    public var dynamic: DynamicJSONValue { DynamicJSONValue(self) }
-}
-
 public enum JSONValue {
     case string(String)
     case number(digits: String)
@@ -36,6 +7,12 @@ public enum JSONValue {
     case object(keyValues: JSONKeyValues)
     case array(JSONArray)
     case null
+}
+
+public enum JSONValueError: Error {
+    // FIXME: Include better information in these error
+    case typeMismatch
+    case missingValue
 }
 
 extension JSONValue {
@@ -122,7 +99,7 @@ extension JSONValue: ExpressibleByDictionaryLiteral {
 // String
 extension JSONValue {
     public func stringValue() throws -> String {
-        guard case let .string(value) = self else { throw JSONError.typeMismatch }
+        guard case let .string(value) = self else { throw JSONValueError.typeMismatch }
         return value
     }
 }
@@ -130,22 +107,22 @@ extension JSONValue {
 // Number
 extension JSONValue {
     public func doubleValue() throws -> Double {
-        guard case let .number(digits) = self, let value = Double(digits) else { throw JSONError.typeMismatch }
+        guard let value = Double(try digits()) else { throw JSONValueError.typeMismatch }
         return value
     }
 
     public func decimalValue() throws -> Decimal {
-        guard case let .number(digits) = self, let value = Decimal(string: digits) else { throw JSONError.typeMismatch }
+        guard let value = Decimal(string: try digits()) else { throw JSONValueError.typeMismatch }
         return value
     }
 
     public func intValue() throws -> Int {
-        guard case let .number(digits) = self, let value = Int(digits) else { throw JSONError.typeMismatch }
+        guard let value = Int(try digits()) else { throw JSONValueError.typeMismatch }
         return value
     }
 
     public func digits() throws -> String {
-        guard case let .number(digits) = self else { throw JSONError.typeMismatch }
+        guard case let .number(digits) = self else { throw JSONValueError.typeMismatch }
         return digits
     }
 
@@ -157,7 +134,7 @@ extension JSONValue {
 // Bool
 extension JSONValue {
     public func boolValue() throws -> Bool {
-        guard case let .bool(value) = self else { throw JSONError.typeMismatch }
+        guard case let .bool(value) = self else { throw JSONValueError.typeMismatch }
         return value
     }
 }
@@ -169,6 +146,9 @@ public typealias JSONKeyValues = [(key: String, value: JSONValue)]
 extension JSONKeyValues {
     public var keys: [String] { self.map(\.key) }
 
+    // Treats KeyValues like a Dictionary. Operates only on first occurrence of key.
+    // Using first occurrence is faster here. Compare, however, to `dictionaryValue()`
+    // which uses last value by default.
     public subscript(_ key: String) -> JSONValue? {
         get { self.first(where: { $0.key == key })?.value }
         set {
@@ -189,31 +169,32 @@ extension JSONKeyValues {
 
 extension JSONValue {
     public func keyValues() throws -> JSONKeyValues {
-        guard case let .object(object) = self else { throw JSONError.typeMismatch }
-        return object
+        guard case let .object(keyValues) = self else { throw JSONValueError.typeMismatch }
+        return keyValues
     }
 
-    // Uniques keys using last value
-    public func dictionaryValue() throws -> [String: JSONValue] {
-        guard case let .object(object) = self else { throw JSONError.typeMismatch }
-        return Dictionary(object, uniquingKeysWith: { _, last in last })
+    // Uniques keys using last value by default. This allows overrides.
+    public func dictionaryValue(uniquingKeysWith: (JSONValue, JSONValue) -> JSONValue = { _, last in last }) throws -> [String: JSONValue] {
+        return Dictionary(try keyValues(), uniquingKeysWith: uniquingKeysWith)
     }
 
+    // Returns first value matching key.
     public func value(for key: String) throws -> JSONValue {
-        guard case let .object(object) = self else { throw JSONError.typeMismatch }
-        guard let result = object.first(where: { $0.key == key })?.value else { throw JSONError.missingValue }
+        guard let result = try keyValues().first(where: { $0.key == key })?.value else {
+            throw JSONValueError.missingValue
+        }
         return result
-
     }
 
     public func values(for key: String) throws -> [JSONValue] {
-        guard case let .object(object) = self else { throw JSONError.typeMismatch }
-        return object.filter({ $0.key == key }).map(\.value)
+        return try keyValues().filter({ $0.key == key }).map(\.value)
     }
 
     public subscript(_ key: String) -> JSONValue {
         get throws { try value(for: key) }
     }
+
+    // TODO: Add setters?
 }
 
 // Array
@@ -222,7 +203,7 @@ public typealias JSONArray = [JSONValue]
 
 extension JSONValue {
     public func arrayValue() throws -> [JSONValue] {
-        guard case let .array(array) = self else { throw JSONError.typeMismatch }
+        guard case let .array(array) = self else { throw JSONValueError.typeMismatch }
         return array
     }
 
@@ -231,28 +212,27 @@ extension JSONValue {
             switch self {
             case let .array(array): return array.count
             case let .object(object): return object.count
-            default: throw JSONError.typeMismatch
+            default: throw JSONValueError.typeMismatch
             }
         }
     }
 
     public func value(at index: Int) throws -> JSONValue {
-        guard case let .array(array) = self else { throw JSONError.typeMismatch }
-        guard array.indices.contains(index) else { throw JSONError.missingValue }
+        let array = try arrayValue()
+        guard array.indices.contains(index) else { throw JSONValueError.missingValue }
         return array[index]
     }
 
     public subscript(_ index: Int) -> JSONValue {
         get throws { try value(at: index) }
     }
+
+    // TODO: Add setters?
 }
 
 // Null
 extension JSONValue {
-    public var isNull: Bool {
-        guard case .null = self else { return false }
-        return true
-    }
+    public var isNull: Bool { self == .null }
 }
 
 // Tuples (JSONKeyValues) can't directly conform to Equatable, so do this by hand.
@@ -262,6 +242,7 @@ extension JSONValue: Equatable {
         lhs.normalized() === rhs.normalized()
     }
 
+    // Strict equality between JSONValues. Key order must be the same.
     public static func === (lhs: JSONValue, rhs: JSONValue) -> Bool {
         switch (lhs, rhs) {
         case (.string(let lhs), .string(let rhs)): return lhs == rhs
@@ -357,7 +338,7 @@ extension Sequence where Element: JSONConvertible {
 extension NSArray: JSONConvertible {
     public func jsonValue() throws -> JSONValue {
         .array(try self.map {
-            guard let value = $0 as? JSONConvertible else { throw JSONError.typeMismatch }
+            guard let value = $0 as? JSONConvertible else { throw JSONValueError.typeMismatch }
             return try value.jsonValue()
         })
     }
@@ -365,7 +346,7 @@ extension NSArray: JSONConvertible {
 
 extension NSDictionary: JSONConvertible {
     public func jsonValue() throws -> JSONValue {
-        guard let dict = self as? [String: JSONConvertible] else { throw JSONError.typeMismatch }
+        guard let dict = self as? [String: JSONConvertible] else { throw JSONValueError.typeMismatch }
         return try dict.jsonValue()
     }
 }
@@ -414,170 +395,4 @@ extension JSONValue: CustomStringConvertible {
             return "[" + values.map(\.description).joined(separator: ", ") + "]"
         }
     }
-}
-
-private extension Decoder {
-    func decodeIfMatching(_ f: (Decoder) throws -> JSONValue) throws -> JSONValue? {
-        do { return try f(self) }
-        catch DecodingError.typeMismatch { return nil }
-    }
-
-    func decodeIfMatchingSingle(_ f: (SingleValueDecodingContainer) throws -> JSONValue) throws -> JSONValue? {
-        try decodeIfMatching { try f($0.singleValueContainer()) }
-    }
-}
-
-private func decodeString(container: SingleValueDecodingContainer) throws -> JSONValue {
-    .string(try container.decode(String.self))
-}
-
-private func decodeBool(container: SingleValueDecodingContainer) throws -> JSONValue {
-    .bool(try container.decode(Bool.self))
-}
-
-private func decodeNumber(container: SingleValueDecodingContainer) throws -> JSONValue {
-    let number = try container.decode(Decimal.self)
-    return .number(digits: "\(number)")
-}
-
-private func decodeObject(decoder: Decoder) throws -> JSONValue {
-    let object = try decoder.container(keyedBy: StringKey.self)
-    let pairs = try object.allKeys.map(\.stringValue).map { key in
-        (key, try object.decode(JSONValue.self, forKey: StringKey(key)))
-    }
-    return .object(keyValues: pairs)
-}
-
-private func decodeArray(decoder: Decoder) throws -> JSONValue {
-    var array = try decoder.unkeyedContainer()
-    var result: [JSONValue] = []
-    if let count = array.count { result.reserveCapacity(count) }
-    while !array.isAtEnd { result.append(try array.decode(JSONValue.self)) }
-    return .array(result)
-}
-
-private func decodeNil(decoder: Decoder) throws -> JSONValue {
-    if try decoder.singleValueContainer().decodeNil() { return .null }
-    else { throw DecodingError.typeMismatch(JSONValue.self,
-                                            .init(codingPath: decoder.codingPath,
-                                                  debugDescription: "Did not find nil")) }
-}
-extension JSONValue: Decodable {
-    public init(from decoder: Decoder) throws {
-        self = try
-        decoder.decodeIfMatching(decodeNil) ??
-        decoder.decodeIfMatchingSingle(decodeString) ??
-        decoder.decodeIfMatchingSingle(decodeNumber) ??
-        decoder.decodeIfMatchingSingle(decodeBool) ??
-        decoder.decodeIfMatching(decodeObject) ??
-        decoder.decodeIfMatching(decodeArray) ??
-        {
-            throw DecodingError.typeMismatch(JSONValue.self,
-                .init(codingPath: decoder.codingPath,
-                      debugDescription: "Unknown JSON type"))
-        }()
-    }
-}
-
-extension JSONValue: Encodable {
-    public func encode(to encoder: Encoder) throws {
-        switch self {
-        case .string(let string):
-            var container = encoder.singleValueContainer()
-            try container.encode(string)
-        case .number:
-            var container = encoder.singleValueContainer()
-            try container.encode(try self.decimalValue())
-        case .bool(let value):
-            var container = encoder.singleValueContainer()
-            try container.encode(value)
-        case .object(keyValues: let keyValues):
-            var container = encoder.container(keyedBy: StringKey.self)
-            for (key, value) in keyValues {
-                try container.encode(value, forKey: StringKey(key))
-            }
-        case .array(let values):
-            var container = encoder.unkeyedContainer()
-            for value in values {
-                try container.encode(value)
-            }
-        case .null:
-            var container = encoder.singleValueContainer()
-            try container.encodeNil()
-        }
-    }
-}
-
-extension JSONValue {
-    public init<S: AsyncSequence>(from tokens: S) async throws
-    where S.Element == JSONToken {
-        var tokenIterator = tokens.makeAsyncIterator()
-
-        guard let value = try await JSONValue(iterator: &tokenIterator) else { throw JSONError.missingValue }
-        guard try await tokenIterator.next() == nil else { throw JSONError.typeMismatch } // FIXME: Fix error
-
-        self = value
-    }
-
-    private init?<I: AsyncIteratorProtocol>(iterator: inout I) async throws
-    where I.Element == JSONToken {
-
-        guard let token = try await iterator.next() else { return nil }
-        switch token {
-
-        case .arrayOpen:
-            var values: JSONArray = []
-            while let value = try await JSONValue(iterator: &iterator) {
-                values.append(value)
-            }
-            self = .array(values)
-
-        case .arrayClose:
-            return nil
-
-        case .objectOpen:
-            var keyValues: JSONKeyValues = []
-
-            while case let .objectKey(key) = try await iterator.next(),
-                  let value = try await JSONValue(iterator: &iterator)
-            {
-                keyValues.append((key: key, value: value))
-            }
-            self = .object(keyValues: keyValues)
-
-        case .objectKey(_):
-            fatalError()
-        case .objectClose:
-            return nil
-        case .true:
-            self = .bool(true)
-        case .false:
-            self = .bool(false)
-        case .null:
-            self = .null
-        case .string(let string):
-            self = .string(string)
-        case .number(let digits):
-            self = .number(digits: digits)
-        }
-    }
-
-    public init(decoding sequence: some Sequence<UInt8>, strict: Bool = false) async throws {
-        try await self.init(from: AsyncJSONTokenSequence(sequence))
-    }
-}
-
-// MARK: - StringKey
-private struct StringKey: CodingKey, Hashable, Comparable, CustomStringConvertible, ExpressibleByStringLiteral {
-    public var description: String { stringValue }
-
-    public let stringValue: String
-    public init(_ string: String) { self.stringValue = string }
-    public init?(stringValue: String) { self.init(stringValue) }
-    public var intValue: Int? { nil }
-    public init?(intValue: Int) { nil }
-
-    public static func < (lhs: StringKey, rhs: StringKey) -> Bool { lhs.stringValue < rhs.stringValue }
-
-    public init(stringLiteral value: String) { self.init(value) }
 }
