@@ -1,5 +1,3 @@
-import Foundation
-
 public enum JSONValue {
     case string(String)
     case number(digits: String)

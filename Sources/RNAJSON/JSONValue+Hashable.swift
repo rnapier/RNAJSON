@@ -5,8 +5,6 @@
 //  Created by Rob Napier on 8/9/22.
 //
 
-import Foundation
-
 // Tuples (JSONKeyValues) can't directly conform to Equatable, so do this by hand.
 // Note that this is normalized equality. Use `===` for strict equality.
 extension JSONValue: Equatable {

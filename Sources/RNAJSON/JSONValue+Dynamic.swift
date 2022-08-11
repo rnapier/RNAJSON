@@ -5,8 +5,6 @@
 //  Created by Rob Napier on 8/9/22.
 //
 
-import Foundation
-
 // Returns value or null
 @dynamicMemberLookup
 public struct DynamicJSONValue {
