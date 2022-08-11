@@ -127,19 +127,3 @@ extension JSONToken: CustomStringConvertible {
         }
     }
 }
-
-internal extension String {
-    var digitsDescription: String {
-        let interpreted = "\(self)"
-        if let int = Int(interpreted), "\(int)" == interpreted {
-            return interpreted
-        }
-        if let double = Double(interpreted), "\(double)" == interpreted {
-            return interpreted
-        }
-        return """
-                .digits("\(self)")
-                """
-
-    }
-}
