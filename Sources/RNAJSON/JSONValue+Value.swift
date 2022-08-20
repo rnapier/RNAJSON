@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Rob Napier on 8/10/22.
-//
-
 import Foundation
 
 // String

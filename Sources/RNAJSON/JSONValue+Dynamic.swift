@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Rob Napier on 8/9/22.
-//
-
 // Returns value or null
 @dynamicMemberLookup
 public struct DynamicJSONValue {
@@ -18,11 +11,11 @@ public struct DynamicJSONValue {
     }
 
     public subscript(_ key: String) -> Self {
-        DynamicJSONValue((try? _jsonValue[key]) ?? .null)
+        Self((try? _jsonValue[key]) ?? .null)
     }
 
     public subscript(_ index: Int) -> Self {
-        DynamicJSONValue((try? _jsonValue[index]) ?? .null)
+        Self((try? _jsonValue[index]) ?? .null)
     }
 }
 

@@ -1,26 +1,20 @@
-//
-//  File.swift
-//  
-//
-//  Created by Rob Napier on 8/9/22.
-//
-
 import Foundation
 
 extension JSONValue: Decodable {
     public init(from decoder: Decoder) throws {
-        self = try
-        decoder.decodeIfMatching(decodeNil) ??
-        decoder.decodeIfMatchingSingle { .string(try $0.decode(String.self)) } ??
-        decoder.decodeIfMatchingSingle { .number(digits: try $0.decode(Decimal.self).description) } ??
-        decoder.decodeIfMatchingSingle { .bool(try $0.decode(Bool.self)) } ??
-        decoder.decodeIfMatching(decodeObject) ??
-        decoder.decodeIfMatching(decodeArray) ??
-        {
-            throw DecodingError.typeMismatch(JSONValue.self,
-                .init(codingPath: decoder.codingPath,
-                      debugDescription: "Unknown JSON type"))
-        }()
+        let matchers = [decodeNil, decodeString, decodeNumber, decodeBool, decodeObject, decodeArray]
+
+        for matcher in matchers {
+            do {
+                self = try matcher(decoder)
+                return
+            }
+            catch DecodingError.typeMismatch { continue }
+        }
+
+        throw DecodingError.typeMismatch(JSONValue.self,
+                                         .init(codingPath: decoder.codingPath,
+                                               debugDescription: "Unknown JSON type"))
     }
 }
 
@@ -30,22 +24,27 @@ extension JSONValue: Encodable {
         case .string(let string):
             var container = encoder.singleValueContainer()
             try container.encode(string)
+
         case .number:
             var container = encoder.singleValueContainer()
             try container.encode(try self.decimalValue())
+
         case .bool(let value):
             var container = encoder.singleValueContainer()
             try container.encode(value)
+
         case .object(keyValues: let keyValues):
             var container = encoder.container(keyedBy: StringKey.self)
             for (key, value) in keyValues {
                 try container.encode(value, forKey: StringKey(key))
             }
+
         case .array(let values):
             var container = encoder.unkeyedContainer()
             for value in values {
                 try container.encode(value)
             }
+
         case .null:
             var container = encoder.singleValueContainer()
             try container.encodeNil()
@@ -53,15 +52,16 @@ extension JSONValue: Encodable {
     }
 }
 
-private extension Decoder {
-    func decodeIfMatching(_ f: (Decoder) throws -> JSONValue) throws -> JSONValue? {
-        do { return try f(self) }
-        catch DecodingError.typeMismatch { return nil }
-    }
+private func decodeString(decoder: Decoder) throws -> JSONValue {
+    try .string(decoder.singleValueContainer().decode(String.self))
+}
 
-    func decodeIfMatchingSingle(_ f: (SingleValueDecodingContainer) throws -> JSONValue) throws -> JSONValue? {
-        try decodeIfMatching { try f($0.singleValueContainer()) }
-    }
+private func decodeNumber(decoder: Decoder) throws -> JSONValue {
+    try .number(digits: decoder.singleValueContainer().decode(Decimal.self).description)
+}
+
+private func decodeBool(decoder: Decoder) throws -> JSONValue {
+    try .bool(decoder.singleValueContainer().decode(Bool.self))
 }
 
 private func decodeObject(decoder: Decoder) throws -> JSONValue {

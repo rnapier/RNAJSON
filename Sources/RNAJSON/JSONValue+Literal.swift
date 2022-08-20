@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  
-//
-//  Created by Rob Napier on 8/9/22.
-//
-
 // ExpressibleBy...Literal
 extension JSONValue: ExpressibleByStringLiteral {
     public init(stringLiteral value: StringLiteralType) {
