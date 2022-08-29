@@ -1,9 +1,9 @@
 // Returns value or null
 @dynamicMemberLookup
 public struct DynamicJSONValue {
-    public var _jsonValue: JSONValue
+    public var jsonValue: JSONValue
     public init(_ jsonValue: JSONValue) {
-        _jsonValue = jsonValue
+        self.jsonValue = jsonValue
     }
 
     public subscript(dynamicMember key: String) -> Self {
@@ -11,16 +11,16 @@ public struct DynamicJSONValue {
     }
 
     public subscript(_ key: String) -> Self {
-        Self((try? _jsonValue[key]) ?? .null)
+        Self((try? jsonValue[key]) ?? .null)
     }
 
     public subscript(_ index: Int) -> Self {
-        Self((try? _jsonValue[index]) ?? .null)
+        Self((try? jsonValue[index]) ?? .null)
     }
 }
 
 extension DynamicJSONValue: CustomStringConvertible {
-    public var description: String { _jsonValue.description }
+    public var description: String { jsonValue.description }
 }
 
 extension JSONValue {
