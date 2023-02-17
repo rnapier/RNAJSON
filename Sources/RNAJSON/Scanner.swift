@@ -29,7 +29,7 @@ public struct JSONScanner {
     public init() {}
 
     public func extractData<Source>(from data: Source, forPath path: [CodingKey]) throws -> Source.SubSequence
-    where Source: BidirectionalCollection<UInt8>
+    where Source: DataProtocol
     {
         var reader = DocumentReader(array: data)
 
@@ -47,7 +47,7 @@ public struct JSONScanner {
 
     // Convenience to accept JSONCodingKey literals.
     public func extractData<Source>(from data: Source, forPath path: [JSONCodingKey]) throws -> Source.SubSequence
-    where Source: BidirectionalCollection<UInt8>, Source.Index == Int {
+    where Source: DataProtocol {
         try extractData(from: data, forPath: path as [CodingKey])
     }
 }
@@ -64,7 +64,7 @@ public enum JSONScannerError: Swift.Error, Equatable {
 
 extension JSONScanner {
 
-    private struct DocumentReader<Source: BidirectionalCollection<UInt8>> {
+    private struct DocumentReader<Source: DataProtocol> {
         let array: Source
 
         private(set) var readerIndex: Source.Index
@@ -253,7 +253,7 @@ extension JSONScanner {
         }
 
         @discardableResult
-        mutating func consumeString() throws -> some Collection<UInt8> {
+        mutating func consumeString() throws -> some DataProtocol {
             guard self.read() == .quote else {
                 throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.offset - 1)
             }

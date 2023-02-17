@@ -13,22 +13,20 @@ let package = Package(
     ],
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
-        .library(
-            name: "RNAJSON",
-            targets: ["RNAJSON"]),
+        .library(name: "RNAJSON", targets: ["RNAJSON"]),
+        .library(name: "JSONValue", targets: ["JSONValue"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "0.0.2"),    // Unit test only
-
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
         // Targets can depend on other targets in this package, and on products in packages this package depends on.
-        .target(name: "RNAJSON", dependencies: [
-        ]),
+        .target(name: "RNAJSON", dependencies: []),
+        .target(name: "JSONValue", dependencies: ["RNAJSON"]),
         .testTarget(
             name: "RNAJSONTests",
-            dependencies: ["RNAJSON",
+            dependencies: ["RNAJSON", "JSONValue",
                            .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
             ],
             resources: [
@@ -36,5 +34,6 @@ let package = Package(
                 Resource.process("Resources/ditto.json"),
             ]
         ),
+        .testTarget(name: "JSONValueTests", dependencies: ["JSONValue"]),
     ]
 )

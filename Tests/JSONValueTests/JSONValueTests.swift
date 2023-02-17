@@ -6,7 +6,7 @@
 //
 
 import XCTest
-import RNAJSON
+import JSONValue
 
 final class JSONValueTests: XCTestCase {
     func testSingleDigit() async throws {

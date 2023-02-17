@@ -7,6 +7,7 @@
 
 import XCTest
 import RNAJSON
+import JSONValue
 
 final class JSONPointerTests: XCTestCase {
 

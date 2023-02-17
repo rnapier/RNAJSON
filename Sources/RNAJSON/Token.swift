@@ -121,9 +121,7 @@ extension JSONToken: CustomStringConvertible {
         case .false: return "false"
         case .null: return ".null"
         case .string(let string): return string.debugDescription
-
-        case .number(let digits):
-            return digits.digitsDescription
+        case .number(let digits): return digits
         }
     }
 }

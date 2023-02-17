@@ -4,6 +4,7 @@
 //
 //  Created by Rob Napier on 8/9/22.
 //
+import RNAJSON
 
 extension JSONValue {
     public init<S: AsyncSequence>(from tokens: S) async throws
