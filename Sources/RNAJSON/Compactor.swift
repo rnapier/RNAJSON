@@ -11,7 +11,6 @@ public struct JSONCompactor {
 }
 
 extension JSONCompactor {
-
     private struct DocumentReader<Source: DataProtocol> {
         let array: Source
 
@@ -19,7 +18,7 @@ extension JSONCompactor {
         var offset: Int { array.distance(from: array.startIndex, to: readerIndex) }
 
         var isEOF: Bool {
-            self.readerIndex >= self.array.endIndex
+            readerIndex >= array.endIndex
         }
 
         mutating func consumeValue() throws -> Data {
@@ -70,7 +69,7 @@ extension JSONCompactor {
             }
 
             while true {
-                result.append(try consumeString())
+                try result.append(consumeString())
                 let colon = try consumeWhitespace()
                 guard colon == .colon else {
                     throw JSONScannerError.unexpectedCharacter(ascii: colon, characterIndex: offset)
@@ -79,7 +78,7 @@ extension JSONCompactor {
                 moveReaderIndex(forwardBy: 1)
                 try consumeWhitespace()
 
-                result.append(try self.consumeValue())
+                try result.append(consumeValue())
 
                 let commaOrBrace = try consumeWhitespace()
                 switch commaOrBrace {
@@ -124,7 +123,7 @@ extension JSONCompactor {
 
             // parse values
             while true {
-                result.append(try consumeValue())
+                try result.append(consumeValue())
                 index += 1
 
                 // consume the whitespace after the value before the comma
@@ -154,18 +153,18 @@ extension JSONCompactor {
 
         init(array: Source) {
             self.array = array
-            self.readerIndex = array.startIndex
+            readerIndex = array.startIndex
         }
 
         mutating func read() -> UInt8? {
-            guard self.readerIndex < self.array.endIndex else {
-                self.readerIndex = self.array.endIndex
+            guard readerIndex < array.endIndex else {
+                readerIndex = array.endIndex
                 return nil
             }
 
             defer { array.formIndex(after: &readerIndex) }
 
-            return self.array[self.readerIndex]
+            return array[readerIndex]
         }
 
         func peek(offset: Int = 0) -> UInt8? {
@@ -173,7 +172,7 @@ extension JSONCompactor {
                 return nil
             }
 
-            return self.array[peekIndex]
+            return array[peekIndex]
         }
 
         mutating func moveReaderIndex(forwardBy offset: Int) {
@@ -183,13 +182,13 @@ extension JSONCompactor {
         @discardableResult
         mutating func consumeWhitespace() throws -> UInt8 {
             var whitespace = 0
-            while let ascii = self.peek(offset: whitespace) {
+            while let ascii = peek(offset: whitespace) {
                 switch ascii {
                 case .space, .return, .newline, .tab:
                     whitespace += 1
                     continue
                 default:
-                    self.moveReaderIndex(forwardBy: whitespace)
+                    moveReaderIndex(forwardBy: whitespace)
                     return ascii
                 }
             }
@@ -198,8 +197,8 @@ extension JSONCompactor {
         }
 
         mutating func consumeString() throws -> Data {
-            guard self.read() == .quote else {
-                throw JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!, characterIndex: self.offset - 1)
+            guard read() == .quote else {
+                throw JSONScannerError.unexpectedCharacter(ascii: peek(offset: -1)!, characterIndex: offset - 1)
             }
 
             var result = Data([.quote])
@@ -214,7 +213,7 @@ extension JSONCompactor {
                     return result
 
                 case .backslash:
-                   try advanceEscapedSequence()
+                    try advanceEscapedSequence()
 
                 default:
                     continue
@@ -224,19 +223,19 @@ extension JSONCompactor {
         }
 
         private mutating func advanceEscapedSequence() throws {
-            guard let ascii = self.read() else {
+            guard let ascii = read() else {
                 throw JSONScannerError.unexpectedEndOfFile
             }
 
             switch ascii {
             case 0x22, // quote
-                0x5C, // backslash
-                0x2F, // slash
-                0x62, // \b
-                0x66, // \f
-                0x6E, // \n
-                0x72, // \r
-                0x74: // \t
+                 0x5C, // backslash
+                 0x2F, // slash
+                 0x62, // \b
+                 0x66, // \f
+                 0x6E, // \n
+                 0x72, // \r
+                 0x74: // \t
                 return
             case 0x75: // \u
                 try advanceUnicodeHexSequence()
@@ -246,11 +245,11 @@ extension JSONCompactor {
         }
 
         private mutating func advanceUnicodeHexSequence() throws {
-            let startIndex = self.offset
-            guard let firstHex = self.read(),
-                  let secondHex = self.read(),
-                  let thirdHex = self.read(),
-                  let forthHex = self.read()
+            let startIndex = offset
+            guard let firstHex = read(),
+                  let secondHex = read(),
+                  let thirdHex = read(),
+                  let forthHex = read()
             else {
                 throw JSONScannerError.unexpectedEndOfFile
             }
@@ -268,8 +267,8 @@ extension JSONCompactor {
         private func isHexAscii(_ ascii: UInt8) -> Bool {
             switch ascii {
             case 48 ... 57, // Digits
-                65 ... 70,  // Uppercase
-                97 ... 102: // Lowercase
+                 65 ... 70, // Uppercase
+                 97 ... 102: // Lowercase
                 return true
             default:
                 return false
@@ -279,47 +278,47 @@ extension JSONCompactor {
         mutating func consumeLiteral() throws -> Data {
             func consume(remainder: String) throws {
                 for byte in remainder.utf8 {
-                    guard self.read() == byte else {
+                    guard read() == byte else {
                         throw isEOF ? JSONScannerError.unexpectedEndOfFile :
-                        JSONScannerError.unexpectedCharacter(ascii: self.peek(offset: -1)!,
-                                                             characterIndex: self.offset - 1)
+                            JSONScannerError.unexpectedCharacter(ascii: peek(offset: -1)!,
+                                                                 characterIndex: offset - 1)
                     }
                 }
             }
 
-            let startIndex = self.readerIndex
+            let startIndex = readerIndex
 
-            switch self.read() {
+            switch read() {
             case UInt8(ascii: "t"): try consume(remainder: "rue")
             case UInt8(ascii: "f"): try consume(remainder: "alse")
             case UInt8(ascii: "n"): try consume(remainder: "ull")
             default: preconditionFailure("Expected to have `t`, `f`, or `n` as first character")
             }
-            return Data(array[startIndex..<self.readerIndex])
+            return Data(array[startIndex ..< readerIndex])
         }
 
         mutating func consumeNumber() throws -> Data {
             var numberchars = 0
 
-            let startIndex = self.readerIndex
+            let startIndex = readerIndex
 
-            while let byte = self.peek(offset: numberchars) {
+            while let byte = peek(offset: numberchars) {
                 switch byte {
                 case UInt8(ascii: "0") ... UInt8(ascii: "9"),
-                    UInt8(ascii: "."),
-                    UInt8(ascii: "e"), UInt8(ascii: "E"),
-                    UInt8(ascii: "+"), UInt8(ascii: "-"):
+                     UInt8(ascii: "."),
+                     UInt8(ascii: "e"), UInt8(ascii: "E"),
+                     UInt8(ascii: "+"), UInt8(ascii: "-"):
                     numberchars += 1
 
                 case .space, .return, .newline, .tab, .comma, .closeArray, .closeObject:
-                    self.moveReaderIndex(forwardBy: numberchars)
-                    return Data(array[startIndex..<self.readerIndex])
+                    moveReaderIndex(forwardBy: numberchars)
+                    return Data(array[startIndex ..< readerIndex])
 
                 default:
                     throw JSONScannerError.unexpectedCharacter(ascii: byte, characterIndex: offset + numberchars)
                 }
             }
-            return Data(array[startIndex..<self.readerIndex])
+            return Data(array[startIndex ..< readerIndex])
         }
     }
 }

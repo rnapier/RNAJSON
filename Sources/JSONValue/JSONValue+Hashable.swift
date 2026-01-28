@@ -1,6 +1,6 @@
 //
-//  File.swift
-//  
+//  JSONValue+Hashable.swift
+//
 //
 //  Created by Rob Napier on 8/9/22.
 //
@@ -15,14 +15,14 @@ extension JSONValue: Equatable {
     // Strict equality between JSONValues. Key order must be the same.
     public static func === (lhs: JSONValue, rhs: JSONValue) -> Bool {
         switch (lhs, rhs) {
-        case (.string(let lhs), .string(let rhs)): return lhs == rhs
-        case (.number(digits: let lhs), .number(digits: let rhs)): return lhs == rhs
-        case (.bool(let lhs), .bool(let rhs)): return lhs == rhs
-        case (.object(keyValues: let lhs), .object(keyValues: let rhs)):
+        case let (.string(lhs), .string(rhs)): return lhs == rhs
+        case let (.number(digits: lhs), .number(digits: rhs)): return lhs == rhs
+        case let (.bool(lhs), .bool(rhs)): return lhs == rhs
+        case let (.object(keyValues: lhs), .object(keyValues: rhs)):
             return lhs.count == rhs.count && lhs.elementsEqual(rhs, by: { lhs, rhs in
                 lhs.key == rhs.key && lhs.value == rhs.value
             })
-        case (.array(let lhs), .array(let rhs)): return lhs == rhs
+        case let (.array(lhs), .array(rhs)): return lhs == rhs
         case (.null, .null): return true
         default: return false
         }
@@ -33,31 +33,31 @@ extension JSONValue: Equatable {
 extension JSONValue: Hashable {
     public func hash(into hasher: inout Hasher) {
         switch self {
-        case .string(let string): hasher.combine(string)
-        case .number(digits: let digits): hasher.combine(digits)
-        case .bool(let value): hasher.combine(value)
-        case .object(keyValues: let keyValues):
+        case let .string(string): hasher.combine(string)
+        case let .number(digits: digits): hasher.combine(digits)
+        case let .bool(value): hasher.combine(value)
+        case let .object(keyValues: keyValues):
             for (key, value) in keyValues {
                 hasher.combine(key)
                 hasher.combine(value)
             }
-        case .array(let array): hasher.combine(array)
+        case let .array(array): hasher.combine(array)
         case .null: hasher.combine(0)
         }
     }
 }
 
-extension JSONValue {
+public extension JSONValue {
     // Sorts all nested objects by key and removes duplicate keys (keeping last value).
-    public func normalized() -> JSONValue {
+    func normalized() -> JSONValue {
         switch self {
-        case .object(keyValues: let keyValues):
+        case let .object(keyValues: keyValues):
             return .object(keyValues:
-                            Dictionary(keyValues, uniquingKeysWith: { _, last in last })
-                .map { (key: $0, value: $1.normalized()) }
-                .sorted(by: { $0.key < $1.key }))
+                Dictionary(keyValues, uniquingKeysWith: { _, last in last })
+                    .map { (key: $0, value: $1.normalized()) }
+                    .sorted(by: { $0.key < $1.key }))
 
-        case .array(let values):
+        case let .array(values):
             return .array(values.map { $0.normalized() })
 
         default: return self

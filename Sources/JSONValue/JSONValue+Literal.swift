@@ -30,7 +30,7 @@ extension JSONValue: ExpressibleByFloatLiteral {
 }
 
 extension JSONValue: ExpressibleByNilLiteral {
-    public init(nilLiteral: ()) {
+    public init(nilLiteral _: ()) {
         self = .null
     }
 }

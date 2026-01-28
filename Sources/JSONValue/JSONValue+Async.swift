@@ -1,14 +1,15 @@
 //
 //  File.swift
-//  
+//
 //
 //  Created by Rob Napier on 8/9/22.
 //
 import RNAJSON
 
-extension JSONValue {
-    public init<S: AsyncSequence>(from tokens: S) async throws
-    where S.Element == JSONToken {
+public extension JSONValue {
+    init<S: AsyncSequence>(from tokens: S) async throws
+        where S.Element == JSONToken
+    {
         var tokenIterator = tokens.makeAsyncIterator()
 
         guard let value = try await JSONValue(iterator: &tokenIterator) else { throw JSONValueError.missingValue }
@@ -18,21 +19,18 @@ extension JSONValue {
     }
 
     private init?<I: AsyncIteratorProtocol>(iterator: inout I) async throws
-    where I.Element == JSONToken {
-
+        where I.Element == JSONToken
+    {
         guard let token = try await iterator.next() else { return nil }
         switch token {
-
         case .arrayOpen:
             var values: JSONArray = []
             while let value = try await JSONValue(iterator: &iterator) {
                 values.append(value)
             }
             self = .array(values)
-
         case .arrayClose:
             return nil
-
         case .objectOpen:
             var keyValues: JSONKeyValues = []
 
@@ -42,8 +40,7 @@ extension JSONValue {
                 keyValues.append((key: key, value: value))
             }
             self = .object(keyValues: keyValues)
-
-        case .objectKey(_):
+        case .objectKey:
             fatalError()
         case .objectClose:
             return nil
@@ -53,14 +50,14 @@ extension JSONValue {
             self = .bool(false)
         case .null:
             self = .null
-        case .string(let string):
+        case let .string(string):
             self = .string(string)
-        case .number(let digits):
+        case let .number(digits):
             self = .number(digits: digits)
         }
     }
 
-    public init(decoding sequence: some Sequence<UInt8>, strict: Bool = false) async throws {
+    init(decoding sequence: some Sequence<UInt8>, strict _: Bool = false) async throws {
         try await self.init(from: AsyncJSONTokenSequence(sequence))
     }
 }

@@ -11,7 +11,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
 
         var strict: Bool
         var byteSource: Base.Iterator?
-        var peek: UInt8? = nil {
+        var peek: UInt8? {
             didSet {
                 if peek != nil {
                     column -= 1
@@ -25,7 +25,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
         var index = -1 // Reading increments; starts at 0
         var location: JSONError.Location { Location(line: line, column: column, index: index) }
 
-        internal init(underlyingIterator: Base.Iterator, strict: Bool) {
+        init(underlyingIterator: Base.Iterator, strict: Bool) {
             byteSource = underlyingIterator
             self.strict = strict
         }
@@ -75,7 +75,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
 
             func consumeOpenString() throws -> String {
                 var copy: [UInt8] = []
-                var output: String = ""
+                var output = ""
 
                 while let byte = nextByte() {
                     switch byte {
@@ -118,7 +118,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
                 case 0x72: return "\u{0D}" // \r
                 case 0x74: return "\u{09}" // \t
                 case 0x75:
-                    return String(try parseUnicodeSequence(in: string))
+                    return try String(parseUnicodeSequence(in: string))
                 default:
                     throw JSONError.unexpectedEscapedCharacter(ascii: ascii, in: string, location)
                 }
@@ -162,7 +162,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
                 return unicode
             }
 
-            func parseUnicodeHexSequence()  throws -> UInt16 {
+            func parseUnicodeHexSequence() throws -> UInt16 {
                 // As stated in RFC-8259 an escaped unicode character is 4 HEXDIGITs long
                 // https://tools.ietf.org/html/rfc8259#section-7
                 guard let firstHex = nextByte(),
@@ -204,7 +204,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
                 }
             }
 
-            func consumeDigits(first: UInt8)  throws -> JSONToken {
+            func consumeDigits(first: UInt8) throws -> JSONToken {
                 // Based heavily on stdlib JSONParser:
                 // https://github.com/apple/swift-corelibs-foundation/blob/main/Sources/Foundation/JSONSerialization%2BParser.swift
                 // Code primarily by Fabian Fett (fabianfett@apple.com)
@@ -244,12 +244,14 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
                         }
                         digits.append(byte)
                         numbersSinceControlChar += 1
+
                     case UInt8(ascii: "1") ... UInt8(ascii: "9"):
                         if hasLeadingZero {
                             throw JSONError.numberWithLeadingZero(location)
                         }
                         digits.append(byte)
                         numbersSinceControlChar += 1
+
                     case UInt8(ascii: "."):
                         guard numbersSinceControlChar > 0, pastControlChar == .operand else {
                             throw JSONError.unexpectedCharacter(ascii: byte, location)
@@ -304,12 +306,12 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
                 return .number(String(decoding: digits, as: Unicode.UTF8.self))
             }
 
-            func consumeScalarValue(first: UInt8)  throws -> JSONToken {
+            func consumeScalarValue(first: UInt8) throws -> JSONToken {
                 switch first {
                 case .quote:
-                    return .string(try consumeOpenString())
+                    return try .string(consumeOpenString())
 
-                case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
+                case UInt8(ascii: "-"), UInt8(ascii: "0") ... UInt8(ascii: "9"):
                     return try consumeDigits(first: first)
 
                 case UInt8(ascii: "t"):
@@ -338,7 +340,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
                 }
             }
 
-            func assertNextByte(is character: Unicode.Scalar)  throws {
+            func assertNextByte(is character: Unicode.Scalar) throws {
                 guard let byte = nextByte() else {
                     throw JSONError.unexpectedEndOfFile(location)
                 }
@@ -347,7 +349,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
                 }
             }
 
-            func consumeOpenLiteral(_ literal: String)  throws {
+            func consumeOpenLiteral(_ literal: String) throws {
                 do {
                     for character in literal.unicodeScalars.dropFirst() {
                         try assertNextByte(is: character)
@@ -358,7 +360,6 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
             }
 
             func consumeToken() throws -> JSONToken? {
-
                 while let first = nextByte() {
                     switch first {
                     case .tab, .newline, .return, .space:
@@ -371,7 +372,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
 
                     case .quote where awaiting.contains(.objectKey):
                         awaiting = [.keyValueSeparator]
-                        return .objectKey(try consumeOpenString())
+                        return try .objectKey(consumeOpenString())
 
                     case .colon where awaiting.contains(.keyValueSeparator):
                         awaiting = [.objectValue]
@@ -458,7 +459,7 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
 //    }
 }
 
-//public extension AsyncSequence where Self.Element == UInt8 {
+// public extension AsyncSequence where Self.Element == UInt8 {
 //    /**
 //     A non-blocking sequence of  `JSONTokens` created by decoding the elements of `self`.
 //     */
@@ -466,9 +467,9 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
 //    var jsonTokens: AsyncJSONTokenSequence<Self> {
 //        AsyncJSONTokenSequence(self)
 //    }
-//}
+// }
 
-//internal extension UInt8 {
+// internal extension UInt8 {
 //    static let space = UInt8(ascii: " ")
 //    static let `return` = UInt8(ascii: "\r")
 //    static let newline = UInt8(ascii: "\n")
@@ -485,5 +486,5 @@ public struct JSONTokenSequence<Base: Sequence>: Sequence where Base.Element == 
 //
 //    static let quote = UInt8(ascii: "\"")
 //    static let backslash = UInt8(ascii: "\\")
-//}
+// }
 //

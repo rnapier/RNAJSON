@@ -20,32 +20,32 @@ extension JSONValue: CustomStringConvertible {
     public var description: String {
         switch self {
         case .null: return ".null"
-        case .string(let string): return string.debugDescription
-        case .number(let digits): return digits.digitsDescription
-        case .bool(let value): return value ? "true" : "false"
-        case .object(keyValues: let keyValues):
+        case let .string(string): return string.debugDescription
+        case let .number(digits): return digits.digitsDescription
+        case let .bool(value): return value ? "true" : "false"
+        case let .object(keyValues: keyValues):
             if keyValues.isEmpty {
                 return "[:]"
             } else {
                 return "[" + keyValues.map { "\($0.key.debugDescription): \($0.value)" }.joined(separator: ", ") + "]"
             }
-        case .array(let values):
+        case let .array(values):
             return "[" + values.map(\.description).joined(separator: ", ") + "]"
         }
     }
 }
 
-internal extension String {
+extension String {
     var digitsDescription: String {
         let interpreted = "\(self)"
-        if let int = Int(interpreted), "\(int)" == interpreted {
+        if let int = Int(interpreted), interpreted == "\(int)" {
             return interpreted
         }
-        if let double = Double(interpreted), "\(double)" == interpreted {
+        if let double = Double(interpreted), interpreted == "\(double)" {
             return interpreted
         }
         return """
-                .digits("\(self)")
-                """
+        .digits("\(self)")
+        """
     }
 }

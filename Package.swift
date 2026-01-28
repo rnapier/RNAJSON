@@ -1,4 +1,4 @@
-// swift-tools-version:5.7
+// swift-tools-version: 6.2
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -9,7 +9,7 @@ let package = Package(
         .macOS(.v12),
         .iOS(.v15),
         .tvOS(.v15),
-        .watchOS(.v8)
+        .watchOS(.v8),
     ],
     products: [
         // Products define the executables and libraries a package produces, and make them visible to other packages.
@@ -17,7 +17,7 @@ let package = Package(
         .library(name: "JSONValue", targets: ["JSONValue"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-async-algorithms", from: "0.0.2"),    // Unit test only
+        .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.1.1"), // Unit test only
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
@@ -27,8 +27,7 @@ let package = Package(
         .testTarget(
             name: "RNAJSONTests",
             dependencies: ["RNAJSON", "JSONValue",
-                           .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
-            ],
+                           .product(name: "AsyncAlgorithms", package: "swift-async-algorithms")],
             resources: [
                 Resource.copy("Resources/json.org"),
                 Resource.process("Resources/ditto.json"),

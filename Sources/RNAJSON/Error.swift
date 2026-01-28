@@ -1,5 +1,5 @@
-public enum JSONError: Swift.Error, Hashable {
-    public struct Location: Hashable {
+public enum JSONError: Swift.Error, Hashable, Sendable {
+    public struct Location: Hashable, Sendable {
         public var line: Int
         public var column: Int
         public var index: Int
@@ -9,6 +9,7 @@ public enum JSONError: Swift.Error, Hashable {
             self.index = index
         }
     }
+
     case unexpectedCharacter(ascii: UInt8, Location)
     case unexpectedEndOfFile(Location)
     case numberWithLeadingZero(Location)

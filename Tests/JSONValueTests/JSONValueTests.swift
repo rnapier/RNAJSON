@@ -1,12 +1,12 @@
 //
-//  File.swift
-//  
+//  JSONValueTests.swift
+//
 //
 //  Created by Rob Napier on 4/6/21.
 //
 
-import XCTest
 import JSONValue
+import XCTest
 
 final class JSONValueTests: XCTestCase {
     func testSingleDigit() async throws {
@@ -27,8 +27,8 @@ final class JSONValueTests: XCTestCase {
 }
 
 struct Customer: Decodable, Equatable {
-   let personal: Personal
-   let source: String
+    let personal: Personal
+    let source: String
 }
 
 struct Personal: Decodable, Equatable {
@@ -38,18 +38,17 @@ struct Personal: Decodable, Equatable {
 }
 
 extension JSONEncoder {
-    func stringEncode<T>(_ value: T) throws -> String where T : Encodable {
+    func stringEncode<T>(_ value: T) throws -> String where T: Encodable {
         // JSONEncoder promises to always return UTF-8
-        String(data: try self.encode(value), encoding: .utf8)!
+        try String(data: encode(value), encoding: .utf8)!
     }
 }
 
 extension JSONDecoder {
-    func stringDecode<T>(_ type: T.Type, from string: String) throws -> T where T : Decodable {
+    func stringDecode<T>(_: T.Type, from string: String) throws -> T where T: Decodable {
         try JSONDecoder().decode(T.self, from: Data(string.utf8))
     }
 }
-
 
 final class RNJSONTests: XCTestCase {
 //    func testStringEncode() throws {
@@ -182,29 +181,30 @@ final class RNJSONTests: XCTestCase {
 //
     func testNullDecode() throws {
         let json = "null"
-        let result = try JSONDecoder().stringDecode(JSONValue.self, from:json)
+        let result = try JSONDecoder().stringDecode(JSONValue.self, from: json)
         let expectedValue = JSONValue.null
 
         XCTAssertEqual(result, expectedValue)
         XCTAssert(expectedValue.isNull)
     }
+
 //
-////    func testNilEncode() throws {
-////        let value = JSON(nil)
-////        let result = try JSONEncoder().stringEncode(value)
-////        let expected = "null"
-////
-////        XCTAssertEqual(result, expected)
-////    }
-////
-////    func testNilDecode() throws {
-////        let json = "null"
-////        let result = try JSONDecoder().stringDecode(JSON.self, from:json)
-////        let expectedValue = JSON(nil)
-////
-////        XCTAssertEqual(result, expectedValue)
-////        XCTAssert(expectedValue.isNull)
-////    }
+    ////    func testNilEncode() throws {
+    ////        let value = JSON(nil)
+    ////        let result = try JSONEncoder().stringEncode(value)
+    ////        let expected = "null"
+    ////
+    ////        XCTAssertEqual(result, expected)
+    ////    }
+    ////
+    ////    func testNilDecode() throws {
+    ////        let json = "null"
+    ////        let result = try JSONDecoder().stringDecode(JSON.self, from:json)
+    ////        let expectedValue = JSON(nil)
+    ////
+    ////        XCTAssertEqual(result, expectedValue)
+    ////        XCTAssert(expectedValue.isNull)
+    ////    }
     func testNestedDecode() throws {
         let json = Data("""
         {
@@ -227,8 +227,8 @@ final class RNJSONTests: XCTestCase {
             "active": true,
             "addons": [
                 "country": "USA",
-                "state": "Michigan"
-            ]
+                "state": "Michigan",
+            ],
         ]
 
         let expected = Customer(personal: Personal(name: "John Doe",
@@ -238,5 +238,4 @@ final class RNJSONTests: XCTestCase {
         let parsed = try JSONDecoder().decode(Customer.self, from: json)
         XCTAssertEqual(parsed, expected)
     }
-
 }

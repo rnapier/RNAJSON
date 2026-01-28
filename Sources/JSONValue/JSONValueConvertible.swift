@@ -1,15 +1,15 @@
 //
-//  File.swift
-//  
+//  JSONValueConvertible.swift
+//
 //
 //  Created by Rob Napier on 8/9/22.
 //
 
 import Foundation
 
-extension JSONValue {
-    public init(_ convertible: LosslessJSONConvertible) { self = convertible.jsonValue() }
-    public init(_ convertible: JSONConvertible) throws { self = try convertible.jsonValue() }
+public extension JSONValue {
+    init(_ convertible: LosslessJSONConvertible) { self = convertible.jsonValue() }
+    init(_ convertible: JSONConvertible) throws { self = try convertible.jsonValue() }
 }
 
 // JSONConvertible
@@ -26,8 +26,8 @@ extension String: LosslessJSONConvertible {
     public func jsonValue() -> JSONValue { .string(self) }
 }
 
-extension BinaryInteger {
-    public func jsonValue() -> JSONValue { .number(digits: "\(self)") }
+public extension BinaryInteger {
+    func jsonValue() -> JSONValue { .number(digits: "\(self)") }
 }
 
 extension Int: LosslessJSONConvertible {}
@@ -41,8 +41,8 @@ extension UInt16: LosslessJSONConvertible {}
 extension UInt32: LosslessJSONConvertible {}
 extension UInt64: LosslessJSONConvertible {}
 
-extension BinaryFloatingPoint {
-    public func jsonValue() -> JSONValue { .number(digits: "\(self)") }
+public extension BinaryFloatingPoint {
+    func jsonValue() -> JSONValue { .number(digits: "\(self)") }
 }
 
 extension Float: LosslessJSONConvertible {}
@@ -63,17 +63,17 @@ extension Bool: LosslessJSONConvertible {
     public func jsonValue() -> JSONValue { .bool(self) }
 }
 
-extension Sequence where Element: LosslessJSONConvertible {
-    public func jsonValue() -> JSONValue { .array(self.map { $0.jsonValue() }) }
+public extension Sequence where Element: LosslessJSONConvertible {
+    func jsonValue() -> JSONValue { .array(map { $0.jsonValue() }) }
 }
 
-extension Sequence where Element: JSONConvertible {
-    public func jsonValue() throws -> JSONValue { .array(try self.map { try $0.jsonValue() }) }
+public extension Sequence where Element: JSONConvertible {
+    func jsonValue() throws -> JSONValue { try .array(map { try $0.jsonValue() }) }
 }
 
 extension NSArray: JSONConvertible {
     public func jsonValue() throws -> JSONValue {
-        .array(try self.map {
+        try .array(map {
             guard let value = $0 as? JSONConvertible else { throw JSONValueError.typeMismatch }
             return try value.jsonValue()
         })
@@ -92,24 +92,24 @@ extension Array: JSONConvertible where Element: JSONConvertible {}
 
 public extension Sequence where Element == (key: String, value: LosslessJSONConvertible) {
     func jsonValue() -> JSONValue {
-        return .object(keyValues: self.map { ($0.key, $0.value.jsonValue()) } )
+        return .object(keyValues: map { ($0.key, $0.value.jsonValue()) })
     }
 }
 
 public extension Sequence where Element == (key: String, value: JSONConvertible) {
     func jsonValue() throws -> JSONValue {
-        return .object(keyValues: try self.map { ($0.key, try $0.value.jsonValue()) } )
+        return try .object(keyValues: map { try ($0.key, $0.value.jsonValue()) })
     }
 }
 
 public extension Dictionary where Key == String, Value: LosslessJSONConvertible {
     func jsonValue() -> JSONValue {
-        return .object(keyValues: self.map { ($0.key, $0.value.jsonValue()) } )
+        return .object(keyValues: map { ($0.key, $0.value.jsonValue()) })
     }
 }
 
 public extension Dictionary where Key == String, Value: JSONConvertible {
     func jsonValue() throws -> JSONValue {
-        return .object(keyValues: try self.map { ($0.key, try $0.value.jsonValue()) } )
+        return try .object(keyValues: map { try ($0.key, $0.value.jsonValue()) })
     }
 }

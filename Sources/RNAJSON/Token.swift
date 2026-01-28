@@ -1,11 +1,11 @@
 //
-//  File.swift
-//  
+//  Token.swift
+//
 //
 //  Created by Rob Napier on 6/20/22.
 //
 
-public enum JSONToken: Hashable {
+public enum JSONToken: Hashable, Sendable {
     case arrayOpen
     case arrayClose
     case objectOpen
@@ -18,12 +18,12 @@ public enum JSONToken: Hashable {
     case number(String)
 }
 
-extension JSONToken {
-    public static func digits(_ digits: String) -> Self {
+public extension JSONToken {
+    static func digits(_ digits: String) -> Self {
         .number(digits)
     }
 
-    public static func key(_ key: String) -> Self {
+    static func key(_ key: String) -> Self {
         .objectKey(key)
     }
 }
@@ -47,7 +47,7 @@ extension JSONToken: ExpressibleByFloatLiteral {
 }
 
 extension JSONToken: ExpressibleByNilLiteral {
-    public init(nilLiteral: ()) {
+    public init(nilLiteral _: ()) {
         self = .null
     }
 }
@@ -59,21 +59,22 @@ extension JSONToken: ExpressibleByBooleanLiteral {
 }
 
 extension JSONToken: CustomStringConvertible {
-    private func describeString(_ data: ([UInt8])) -> String {
+    private func describeString(_ data: [UInt8]) -> String {
         let string = String(decoding: data, as: Unicode.UTF8.self)
         if !string.contains("\u{FFFD}") {
             if string.contains("\\") {
                 return """
-                        #"\(string)"#
-                        """
+                #"\(string)"#
+                """
             } else {
                 return """
-                        "\(string)"
-                        """
+                "\(string)"
+                """
             }
         }
         return string
     }
+
     private func encodeCharacter(_ c: Character) -> String {
         switch c {
         case "\u{0}" ..< " ":
@@ -115,13 +116,13 @@ extension JSONToken: CustomStringConvertible {
         case .arrayOpen: return ".arrayOpen"
         case .arrayClose: return ".arrayClose"
         case .objectOpen: return ".objectOpen"
-        case .objectKey(let string): return ".key(\(string.debugDescription))"
+        case let .objectKey(string): return ".key(\(string.debugDescription))"
         case .objectClose: return ".objectClose"
         case .true: return "true"
         case .false: return "false"
         case .null: return ".null"
-        case .string(let string): return string.debugDescription
-        case .number(let digits): return digits
+        case let .string(string): return string.debugDescription
+        case let .number(digits): return digits
         }
     }
 }

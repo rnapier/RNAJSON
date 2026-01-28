@@ -23,6 +23,6 @@ extension DynamicJSONValue: CustomStringConvertible {
     public var description: String { jsonValue.description }
 }
 
-extension JSONValue {
-    public var dynamic: DynamicJSONValue { DynamicJSONValue(self) }
+public extension JSONValue {
+    var dynamic: DynamicJSONValue { DynamicJSONValue(self) }
 }

@@ -1,15 +1,14 @@
 //
 //  ScannerTests.swift
-//  
+//
 //
 //  Created by Rob Napier on 7/24/22.
 //
 
-import XCTest
 import RNAJSON
+import XCTest
 
 final class ScannerTests: XCTestCase {
-
     func testLeadingAndTrailingWhitespaceIsSkipped() async throws {
         let json = Array(#"""
 
@@ -61,7 +60,7 @@ final class ScannerTests: XCTestCase {
         """#.utf8)
 
         let scanner = JSONScanner()
-        let result = Array(try scanner.extractData(from: json, forPath: []))
+        let result = try Array(scanner.extractData(from: json, forPath: []))
         XCTAssertEqual(result, expected)
     }
 
@@ -128,7 +127,7 @@ final class ScannerTests: XCTestCase {
         """#.utf8)
 
         let scanner = JSONScanner()
-        let result = Array(try scanner.extractData(from: json, forPath: []))
+        let result = try Array(scanner.extractData(from: json, forPath: []))
         XCTAssertEqual(result, json)
     }
 
@@ -141,7 +140,7 @@ final class ScannerTests: XCTestCase {
         2
         """#.utf8)
         let scanner = JSONScanner()
-        let result = Array(try scanner.extractData(from: json, forPath: [1]))
+        let result = try Array(scanner.extractData(from: json, forPath: [1]))
 
         XCTAssertEqual(result, expected)
     }
@@ -173,7 +172,7 @@ final class ScannerTests: XCTestCase {
         "aerodactyl"
         """#.utf8)
         let scanner = JSONScanner()
-        let result = Array(try scanner.extractData(from: json, forPath: ["name"]))
+        let result = try Array(scanner.extractData(from: json, forPath: ["name"]))
 
         XCTAssertEqual(result, expected)
     }
@@ -205,30 +204,30 @@ final class ScannerTests: XCTestCase {
         "https://pokeapi.co/api/v2/type/6/"
         """#.utf8)
         let scanner = JSONScanner()
-        let result = Array(try scanner.extractData(from: json, forPath: ["types", 0, "type", "url"]))
+        let result = try Array(scanner.extractData(from: json, forPath: ["types", 0, "type", "url"]))
         XCTAssertEqual(result, expected)
     }
 
     func testSecondaryDecoding() throws {
         let jsonString = """
-            {
-            "groups": [
-              {
-                "id": "oruoiru",
-                "testProp": "rhorir",
-                "name": "* C-Level",
-                "description": "C-Level"
-              },
-              {
-                "id": "seese",
-                "testProp": "seses",
-                "name": "CDLevel",
-                "description": "CDLevel"
-              }
-            ],
-            "totalCount": 41
-            }
-            """
+        {
+        "groups": [
+          {
+            "id": "oruoiru",
+            "testProp": "rhorir",
+            "name": "* C-Level",
+            "description": "C-Level"
+          },
+          {
+            "id": "seese",
+            "testProp": "seses",
+            "name": "CDLevel",
+            "description": "CDLevel"
+          }
+        ],
+        "totalCount": 41
+        }
+        """
 
         struct Group: Codable {
             var id: String
